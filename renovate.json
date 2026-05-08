@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":pinVersions",
+    ":semanticCommits"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/New_York",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "pin",
+  "packageRules": [
+    {
+      "description": "Only manage docs/ for now; rest of the repo is out of scope until its own bump strategy is decided.",
+      "matchFileNames": ["docs/**"],
+      "enabled": true
+    },
+    {
+      "description": "Ignore everything outside docs/ until a strategy is set for backend/frontend.",
+      "matchFileNames": ["!docs/**"],
+      "enabled": false
+    },
+    {
+      "description": "Group fontsource + sharp minor/patch updates — boring, batch them.",
+      "matchFileNames": ["docs/**"],
+      "matchPackageNames": ["@fontsource/**", "sharp"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "docs non-astro deps",
+      "automerge": false
+    },
+    {
+      "description": "Astro + Starlight: load-bearing, pre-1.0 Starlight can break layouts on minor bumps. Always human-review.",
+      "matchFileNames": ["docs/**"],
+      "matchPackageNames": ["astro", "@astrojs/**"],
+      "groupName": "astro + starlight",
+      "automerge": false,
+      "labels": ["dependencies", "needs-human"],
+      "prPriority": 5
+    },
+    {
+      "description": "Major updates always separate, never auto-merged.",
+      "matchFileNames": ["docs/**"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "needs-human", "major-update"]
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  }
+}
