@@ -21,7 +21,10 @@ def client(monkeypatch):
         return True
 
     monkeypatch.setattr(main, "_check_db", _ok_db)
-    monkeypatch.setattr(main, "_check_storage", lambda: True)
+    async def _ok_storage():
+        return True
+
+    monkeypatch.setattr(main, "_check_storage", _ok_storage)
     monkeypatch.setattr(main, "_check_redis", _ok_redis)
     transport = ASGITransport(app=main.app)
     return AsyncClient(transport=transport, base_url="http://test")
@@ -47,7 +50,10 @@ async def test_health_db_down(monkeypatch):
         return True
 
     monkeypatch.setattr(main, "_check_db", _bad_db)
-    monkeypatch.setattr(main, "_check_storage", lambda: True)
+    async def _ok_storage():
+        return True
+
+    monkeypatch.setattr(main, "_check_storage", _ok_storage)
     monkeypatch.setattr(main, "_check_redis", _ok_redis)
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:

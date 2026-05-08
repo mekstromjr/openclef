@@ -15,6 +15,7 @@ from openclef.db import engine
 from openclef.routers import auth as auth_router
 from openclef.routers import setup as setup_router
 from openclef.routers import users as users_router
+from openclef.storage import build_storage
 
 log = structlog.get_logger()
 settings = get_settings()
@@ -29,6 +30,9 @@ async def lifespan(app: FastAPI):
     # client per app process is fine; redis-py multiplexes commands
     # over a connection pool internally.
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=False)
+    # Storage backend (LocalStorage or ThumbnailCachedStorage(S3Storage))
+    # is built once per process; methods are stateless across calls.
+    app.state.storage = build_storage()
     # First-run env-var bootstrap: if OPENCLEF_ADMIN_{USER,PASSWORD} are
     # set AND no users exist, create the admin silently. No-op otherwise.
     try:
@@ -66,11 +70,15 @@ async def _check_db() -> bool:
         return False
 
 
-def _check_storage() -> bool:
-    if settings.storage_backend == "local":
-        return os.access(settings.data_dir, os.W_OK) if settings.data_dir.exists() else False
-    # S3 reachability lands in ticket 0137 — for now report ok if configured.
-    return True
+async def _check_storage() -> bool:
+    storage = getattr(app.state, "storage", None)
+    if storage is None:
+        return False
+    try:
+        return await storage.ping()
+    except Exception as exc:
+        log.warning("openclef.health.storage_failed", error=str(exc))
+        return False
 
 
 async def _check_redis() -> bool:
@@ -87,7 +95,7 @@ async def _check_redis() -> bool:
 @app.get("/health")
 async def health() -> dict:
     db_ok = await _check_db()
-    storage_ok = _check_storage()
+    storage_ok = await _check_storage()
     redis_ok = await _check_redis()
     if not (db_ok and storage_ok and redis_ok):
         raise HTTPException(
