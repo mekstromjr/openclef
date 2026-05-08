@@ -22,6 +22,8 @@ dependencies = [
     "structlog==24.4.0",
     "dramatiq[redis]==1.17.1",
     "redis==5.2.1",
+    "argon2-cffi==23.1.0",
+    "itsdangerous==2.2.0",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +33,8 @@ dev = [
     "httpx==0.28.1",
     "ruff==0.8.4",
     # Real Postgres for migration + FTS tests; matches prod's PG 16 image.
-    "testcontainers[postgres]==4.9.0",
+    # Redis for session-revocation + rate-limit integration tests.
+    "testcontainers[postgres,redis]==4.9.0",
     # factory-boy is sync; the data-model test layer wraps it for AsyncSession.
     "factory-boy==3.3.1",
 ]

@@ -17,8 +17,12 @@ def client(monkeypatch):
     async def _ok_db():
         return True
 
+    async def _ok_redis():
+        return True
+
     monkeypatch.setattr(main, "_check_db", _ok_db)
     monkeypatch.setattr(main, "_check_storage", lambda: True)
+    monkeypatch.setattr(main, "_check_redis", _ok_redis)
     transport = ASGITransport(app=main.app)
     return AsyncClient(transport=transport, base_url="http://test")
 
@@ -27,15 +31,24 @@ async def test_health_ok(client):
     async with client as c:
         r = await c.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "db": "connected", "storage": "ok"}
+    assert r.json() == {
+        "status": "ok",
+        "db": "connected",
+        "storage": "ok",
+        "redis": "connected",
+    }
 
 
 async def test_health_db_down(monkeypatch):
     async def _bad_db():
         return False
 
+    async def _ok_redis():
+        return True
+
     monkeypatch.setattr(main, "_check_db", _bad_db)
     monkeypatch.setattr(main, "_check_storage", lambda: True)
+    monkeypatch.setattr(main, "_check_redis", _ok_redis)
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.get("/health")

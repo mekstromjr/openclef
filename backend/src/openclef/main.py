@@ -6,10 +6,15 @@ import structlog
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from redis.asyncio import Redis
 from sqlalchemy import text
 
+from openclef.auth.bootstrap import maybe_bootstrap_admin
 from openclef.config import get_settings
 from openclef.db import engine
+from openclef.routers import auth as auth_router
+from openclef.routers import setup as setup_router
+from openclef.routers import users as users_router
 
 log = structlog.get_logger()
 settings = get_settings()
@@ -20,9 +25,24 @@ STATIC_DIR = Path(os.environ.get("OPENCLEF_STATIC_DIR", "/app/static"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("openclef.startup", version=settings.version, env=settings.env)
-    yield
-    await engine.dispose()
-    log.info("openclef.shutdown")
+    # Redis pool used by auth (revocation set) and rate-limit. One
+    # client per app process is fine; redis-py multiplexes commands
+    # over a connection pool internally.
+    app.state.redis = Redis.from_url(settings.redis_url, decode_responses=False)
+    # First-run env-var bootstrap: if OPENCLEF_ADMIN_{USER,PASSWORD} are
+    # set AND no users exist, create the admin silently. No-op otherwise.
+    try:
+        await maybe_bootstrap_admin(engine)
+    except Exception as exc:
+        log.error("openclef.bootstrap.failed", error=str(exc))
+        # Don't crash startup on bootstrap failure — operator can still
+        # use the /setup wizard.
+    try:
+        yield
+    finally:
+        await app.state.redis.aclose()
+        await engine.dispose()
+        log.info("openclef.shutdown")
 
 
 app = FastAPI(
@@ -30,6 +50,10 @@ app = FastAPI(
     version=settings.version,
     lifespan=lifespan,
 )
+
+app.include_router(auth_router.router)
+app.include_router(setup_router.router)
+app.include_router(users_router.router)
 
 
 async def _check_db() -> bool:
@@ -49,20 +73,33 @@ def _check_storage() -> bool:
     return True
 
 
+async def _check_redis() -> bool:
+    try:
+        client: Redis | None = getattr(app.state, "redis", None)
+        if client is None:
+            return False
+        return await client.ping()
+    except Exception as exc:
+        log.warning("openclef.health.redis_failed", error=str(exc))
+        return False
+
+
 @app.get("/health")
 async def health() -> dict:
     db_ok = await _check_db()
     storage_ok = _check_storage()
-    if not (db_ok and storage_ok):
+    redis_ok = await _check_redis()
+    if not (db_ok and storage_ok and redis_ok):
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "degraded",
                 "db": "connected" if db_ok else "down",
                 "storage": "ok" if storage_ok else "unreachable",
+                "redis": "connected" if redis_ok else "down",
             },
         )
-    return {"status": "ok", "db": "connected", "storage": "ok"}
+    return {"status": "ok", "db": "connected", "storage": "ok", "redis": "connected"}
 
 
 @app.get("/api/v1/version")
