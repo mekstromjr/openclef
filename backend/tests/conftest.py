@@ -141,6 +141,91 @@ async def redis_client(redis_url: str):
 
 
 @pytest_asyncio.fixture
+async def app_kit(
+    database_url: str, redis_url: str, apply_migrations, monkeypatch
+):
+    """FastAPI test kit: AsyncClient + a sessionmaker that commits.
+
+    Use `kit.client` to drive the API and `kit.sessionmaker()` (async
+    context manager) to seed/inspect data. Tests look like:
+
+        async def test_x(app_kit):
+            async with app_kit.sessionmaker() as s:
+                await _seed_user(s, ...)
+            r = await app_kit.client.post(...)
+
+    Tables are TRUNCATEd on fixture entry so each test starts with a
+    clean DB. Redis is FLUSHDBed too. Tests don't need to clean up.
+    """
+    monkeypatch.setenv("OPENCLEF_DATABASE_URL", database_url)
+    monkeypatch.setenv("OPENCLEF_REDIS_URL", redis_url)
+    monkeypatch.setenv("OPENCLEF_SECRET_KEY", "test-secret-do-not-use-in-prod")
+    monkeypatch.setenv("OPENCLEF_PEPPER", "test-pepper")
+    monkeypatch.setenv("OPENCLEF_ARGON2_TIME_COST", "1")
+    monkeypatch.setenv("OPENCLEF_ARGON2_MEMORY_COST", "8192")
+    monkeypatch.setenv("OPENCLEF_ARGON2_PARALLELISM", "1")
+    monkeypatch.setenv("OPENCLEF_ENV", "dev")
+
+    from dataclasses import dataclass
+
+    from httpx import ASGITransport, AsyncClient
+    from redis.asyncio import Redis
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from openclef import main as app_main
+    from openclef.auth.deps import get_redis
+    from openclef.db import get_session
+
+    test_engine = create_async_engine(database_url, future=True)
+    TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
+    test_redis = Redis.from_url(redis_url, decode_responses=False)
+
+    # Per-test cleanup: TRUNCATE all domain tables (preserves alembic_version).
+    domain_tables = [
+        "annotation_revisions",
+        "annotations",
+        "arrangement_tags",
+        "enrichment_jobs",
+        "setlist_items",
+        "setlists",
+        "parts",
+        "tags",
+        "arrangements",
+        "user_settings",
+        "users",
+    ]
+    async with test_engine.begin() as conn:
+        await conn.execute(sa_text(f"TRUNCATE {', '.join(domain_tables)} CASCADE"))
+    await test_redis.flushdb()
+
+    async def _override_session():
+        async with TestSession() as s:
+            yield s
+
+    async def _override_redis():
+        return test_redis
+
+    app_main.app.dependency_overrides[get_session] = _override_session
+    app_main.app.dependency_overrides[get_redis] = _override_redis
+    app_main.app.state.redis = test_redis
+
+    @dataclass
+    class AppKit:
+        client: AsyncClient
+        sessionmaker: async_sessionmaker
+
+    transport = ASGITransport(app=app_main.app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield AppKit(client=client, sessionmaker=TestSession)
+    finally:
+        app_main.app.dependency_overrides.clear()
+        await test_redis.aclose()
+        await test_engine.dispose()
+
+
+@pytest_asyncio.fixture
 async def session(database_url: str, apply_migrations) -> AsyncIterator[AsyncSession]:
     """Per-test async session with transaction-rollback isolation.
 
