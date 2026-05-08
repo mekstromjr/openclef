@@ -1,0 +1,82 @@
+# OpenClef CI
+#
+# Stages:
+#   - test:  Secret Detection (GitLab template; fast, catches committed creds)
+#   - build: Kaniko → pushes image to registry.meklab.net/meklab/openclef
+#
+# Image tags produced:
+#   - :<short-sha>  always (the canonical reference for compose/Helm)
+#   - :latest       on main (convenience only — never referenced in compose/Helm)
+#   - :<tag>        on semver git tag push (vX.Y.Z) — the production artifact
+#
+# Build runs on:
+#   - any change on main (publish the new sha + bump :latest)
+#   - merge_request events (preview build for the MR; surfaces CI failure
+#     before the change lands rather than after)
+#   - semver tag push (the production artifact)
+#
+# Mirrors the meklab-landing pipeline; same runner tag (meklab-k3s) and
+# same Kaniko cache repo convention.
+
+stages:
+  - test
+  - build
+
+# Dedupe: when a branch has an open MR, run only the MR pipeline (not the
+# duplicate branch pipeline). Standard GitLab workflow:rules pattern.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+variables:
+  REGISTRY: registry.meklab.net
+  IMAGE_PATH: meklab/openclef
+
+secret_detection:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_COMMIT_BRANCH || $CI_COMMIT_TAG
+      when: always
+
+build:image:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  tags:
+    - meklab-k3s
+  script:
+    - |
+      DEST_ARGS="--destination=${REGISTRY}/${IMAGE_PATH}:${CI_COMMIT_SHORT_SHA}"
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        DEST_ARGS="$DEST_ARGS --destination=${REGISTRY}/${IMAGE_PATH}:latest"
+      fi
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        DEST_ARGS="$DEST_ARGS --destination=${REGISTRY}/${IMAGE_PATH}:${CI_COMMIT_TAG}"
+      fi
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --cache=true \
+        --cache-repo="${REGISTRY}/${IMAGE_PATH}/cache" \
+        --snapshot-mode=redo \
+        --use-new-run \
+        $DEST_ARGS
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+      when: always
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - when: never
