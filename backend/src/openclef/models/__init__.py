@@ -6,9 +6,19 @@ when they land.
 """
 from __future__ import annotations
 
-# Re-exports land as model modules are added in subsequent commits:
-#   from openclef.models.user import User, UserSettings  # noqa: F401
-#   from openclef.models.library import Arrangement, Part, Tag, ArrangementTag  # noqa: F401
+from openclef.models.library import Arrangement, ArrangementTag, Part, Tag  # noqa: F401
+from openclef.models.user import User, UserSettings  # noqa: F401
+
+# Phase 2 + enrichment models land in subsequent commits of ticket 0135:
 #   from openclef.models.annotation import Annotation, AnnotationRevision  # noqa: F401
 #   from openclef.models.setlist import Setlist, SetlistItem  # noqa: F401
 #   from openclef.models.enrichment import EnrichmentJob  # noqa: F401
+
+__all__ = [
+    "Arrangement",
+    "ArrangementTag",
+    "Part",
+    "Tag",
+    "User",
+    "UserSettings",
+]
