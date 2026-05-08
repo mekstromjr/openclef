@@ -17,6 +17,7 @@ from openclef.storage._protocol import (
     StorageError,
     StorageMeta,
 )
+from openclef.storage.cache import ThumbnailCachedStorage
 from openclef.storage.local import LocalStorage
 from openclef.storage.s3 import S3Storage
 
@@ -24,6 +25,7 @@ from openclef.storage.s3 import S3Storage
 def build_storage() -> Storage:
     s = get_settings()
     if s.storage_backend == "local":
+        # Local backend IS the cache; wrapping it would just duplicate IO.
         return LocalStorage(root=s.data_dir)
     if s.storage_backend == "s3":
         missing = [
@@ -39,13 +41,18 @@ def build_storage() -> Storage:
             raise StorageError(
                 f"storage_backend=s3 requires these env vars: {', '.join(missing)}"
             )
-        return S3Storage(
+        upstream: Storage = S3Storage(
             bucket=s.s3_bucket,
             endpoint_url=s.s3_endpoint,
             region=s.s3_region,
             access_key=s.s3_access_key,
             secret_key=s.s3_secret_key,
             path_style=s.s3_path_style,
+        )
+        return ThumbnailCachedStorage(
+            upstream=upstream,
+            cache_dir=s.data_dir / "thumbnail-cache",
+            max_size_bytes=s.thumbnail_cache_mb * 1024 * 1024,
         )
     raise StorageError(f"unknown storage backend: {s.storage_backend!r}")
 
@@ -57,5 +64,6 @@ __all__ = [
     "Storage",
     "StorageError",
     "StorageMeta",
+    "ThumbnailCachedStorage",
     "build_storage",
 ]
