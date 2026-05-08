@@ -13,6 +13,7 @@ from openclef.config import get_settings
 from openclef.db import engine
 from openclef.routers import auth as auth_router
 from openclef.routers import setup as setup_router
+from openclef.routers import users as users_router
 
 log = structlog.get_logger()
 settings = get_settings()
@@ -43,6 +44,7 @@ app = FastAPI(
 
 app.include_router(auth_router.router)
 app.include_router(setup_router.router)
+app.include_router(users_router.router)
 
 
 async def _check_db() -> bool:
