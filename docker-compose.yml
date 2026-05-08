@@ -43,7 +43,15 @@ services:
       OPENCLEF_DATABASE_URL: postgresql+asyncpg://openclef:openclef@postgres:5432/openclef
       OPENCLEF_REDIS_URL: redis://redis:6379/0
       OPENCLEF_VERSION: ${OPENCLEF_VERSION:-dev}
-      OPENCLEF_ENV: dev
+      OPENCLEF_ENV: ${OPENCLEF_ENV:-dev}
+      # Auth — pass through from host env so the operator can set them
+      # at compose-up time without editing this file. Production
+      # deployments should set OPENCLEF_PEPPER and OPENCLEF_SECRET_KEY.
+      OPENCLEF_PEPPER: ${OPENCLEF_PEPPER:-}
+      OPENCLEF_SECRET_KEY: ${OPENCLEF_SECRET_KEY:-}
+      # First-run admin bootstrap (optional). Both must be set.
+      OPENCLEF_ADMIN_USER: ${OPENCLEF_ADMIN_USER:-}
+      OPENCLEF_ADMIN_PASSWORD: ${OPENCLEF_ADMIN_PASSWORD:-}
     volumes:
       - openclef-data:/app/data
 

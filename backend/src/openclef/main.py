@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 from sqlalchemy import text
 
+from openclef.auth.bootstrap import maybe_bootstrap_admin
 from openclef.config import get_settings
 from openclef.db import engine
 from openclef.routers import auth as auth_router
@@ -28,6 +29,14 @@ async def lifespan(app: FastAPI):
     # client per app process is fine; redis-py multiplexes commands
     # over a connection pool internally.
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=False)
+    # First-run env-var bootstrap: if OPENCLEF_ADMIN_{USER,PASSWORD} are
+    # set AND no users exist, create the admin silently. No-op otherwise.
+    try:
+        await maybe_bootstrap_admin(engine)
+    except Exception as exc:
+        log.error("openclef.bootstrap.failed", error=str(exc))
+        # Don't crash startup on bootstrap failure — operator can still
+        # use the /setup wizard.
     try:
         yield
     finally:
