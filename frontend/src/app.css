@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+
+/* Tailwind v4 CSS-first config. Theme tokens, custom utilities, and
+ * dark-mode strategy live here rather than in tailwind.config.js.
+ * Phase 1 ships the dark default; Tier 2 light-mode toggle lands in
+ * ticket 0141. */
+@theme {
+  --color-clef-bg: oklch(0.18 0 0);
+  --color-clef-fg: oklch(0.95 0 0);
+  --color-clef-accent: oklch(0.7 0.15 260);
+}
