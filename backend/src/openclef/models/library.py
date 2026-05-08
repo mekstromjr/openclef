@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, ForeignKey, Index, SmallInteger, Text, Uuid, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, SmallInteger, Text, Uuid, text
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,9 +73,11 @@ class Arrangement(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
+        DateTime(timezone=True), server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
     )
 
     parts: Mapped[list["Part"]] = relationship(
@@ -110,7 +112,9 @@ class Part(Base):
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
 
     arrangement: Mapped[Arrangement] = relationship(back_populates="parts")
 

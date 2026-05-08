@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Text, Uuid
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,9 +34,11 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(
         pg_enum(UserRole, name="user_role"), nullable=False, default=UserRole.USER
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
+        DateTime(timezone=True), server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
     )
 
     settings: Mapped["UserSettings | None"] = relationship(

@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, SmallInteger, Text, UniqueConstraint, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, SmallInteger, Text, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,9 +42,11 @@ class Annotation(Base):
         ForeignKey("annotation_revisions.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
+        DateTime(timezone=True), server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
     )
 
     revisions: Mapped[list["AnnotationRevision"]] = relationship(
@@ -73,7 +75,9 @@ class AnnotationRevision(Base):
         nullable=True,
     )
     payload_jsonb: Mapped[dict] = mapped_column(JSONB(), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
     created_session_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
     annotation: Mapped[Annotation] = relationship(

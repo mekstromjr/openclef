@@ -21,8 +21,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Pull the URL from app settings (env-driven) rather than alembic.ini.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Prefer an explicit URL set on the Config (tests pass theirs via
+# `alembic_cfg.set_main_option("sqlalchemy.url", url)`); fall back to
+# app settings (env-driven) for the prod entrypoint path.
+_explicit_url = config.get_main_option("sqlalchemy.url")
+if not _explicit_url:
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+
+# Importing the models package attaches every ORM table to Base.metadata
+# so autogenerate (and the runtime check in tests that `Base.metadata`
+# matches the live schema) sees the full picture.
+import openclef.models  # noqa: F401, E402
 
 target_metadata = Base.metadata
 
@@ -55,8 +64,28 @@ async def run_async_migrations() -> None:
     await connectable.dispose()
 
 
+def run_sync_migrations() -> None:
+    from sqlalchemy import engine_from_config
+
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
+    connectable.dispose()
+
+
 def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
+    # Tests pass a sync (psycopg2) URL; the prod entrypoint passes an
+    # asyncpg URL. Pick the path based on the dialect rather than
+    # forcing one or the other.
+    url = config.get_main_option("sqlalchemy.url") or ""
+    if "+asyncpg" in url or "+aiopg" in url:
+        asyncio.run(run_async_migrations())
+    else:
+        run_sync_migrations()
 
 
 if context.is_offline_mode():

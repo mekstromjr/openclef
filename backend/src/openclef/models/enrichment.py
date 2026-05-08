@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, SmallInteger, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, SmallInteger, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,8 +36,10 @@ class EnrichmentJob(Base):
     selected_candidate_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text(), nullable=True)
     attempts: Mapped[int] = mapped_column(SmallInteger(), nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_enrichment_jobs_arrangement_id", "arrangement_id"),

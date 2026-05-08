@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, SmallInteger, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, SmallInteger, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from openclef.db import Base
@@ -25,9 +25,11 @@ class Setlist(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=utcnow_aware(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=utcnow_aware(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
+        DateTime(timezone=True), server_default=utcnow_aware(), onupdate=utcnow_aware(), nullable=False
     )
 
     items: Mapped[list["SetlistItem"]] = relationship(
