@@ -1,0 +1,34 @@
+.git
+.gitignore
+.gitlab-ci.yml
+.dockerignore
+LICENSE
+
+# Python
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.coverage
+
+# Node
+**/node_modules
+**/.svelte-kit
+**/build
+**/dist
+**/.vite
+**/*.log
+
+# Editors / OS
+.vscode
+.idea
+.DS_Store
+
+# Local env
+.env
+.env.*
+
+# Deploy artifacts not needed in the image
+deploy/

@@ -1,0 +1,52 @@
+# OpenClef Compose stack — Phase 1 deployment-spine baseline (ticket 0134).
+# Purpose: prove the integrated path (FastAPI + Postgres + Redis + SvelteKit
+# build) works from a fresh checkout. Real prod runs in K3s via Flux; this
+# file is for local dev and OSS users who want a one-command stack.
+#
+# Versions per CLAUDE.md design principle 6: pin image minor/patch.
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: openclef
+      POSTGRES_PASSWORD: openclef
+      POSTGRES_DB: openclef
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openclef -d openclef"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      OPENCLEF_DATABASE_URL: postgresql+asyncpg://openclef:openclef@postgres:5432/openclef
+      OPENCLEF_REDIS_URL: redis://redis:6379/0
+      OPENCLEF_VERSION: ${OPENCLEF_VERSION:-dev}
+      OPENCLEF_ENV: dev
+    volumes:
+      - openclef-data:/app/data
+
+volumes:
+  postgres-data:
+  openclef-data:
