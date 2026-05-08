@@ -1,0 +1,26 @@
+{
+  "name": "openclef-docs",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "OpenClef documentation subsite (Astro Starlight).",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.39.2",
+    "@fontsource/crimson-pro": "5.2.8",
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "astro": "6.2.2",
+    "sharp": "0.34.5"
+  }
+}
