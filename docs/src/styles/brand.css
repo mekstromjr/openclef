@@ -1,0 +1,89 @@
+/*
+ * OpenClef brand tokens.
+ * Source of truth: ../content/docs/brand/color.md, typography.md.
+ * Starlight reads these via the `customCss` array in astro.config.mjs.
+ */
+
+/* OFL fonts bundled via @fontsource. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@import "@fontsource/crimson-pro/400.css";
+@import "@fontsource/crimson-pro/600.css";
+@import "@fontsource/crimson-pro/400-italic.css";
+@import "@fontsource/crimson-pro/600-italic.css";
+
+@import "@fontsource/jetbrains-mono/400.css";
+
+:root {
+  /* --- Brand color tokens --- */
+  --clef-charcoal: #111111;
+  --clef-ivory: #f6f4ef;
+  --clef-midnight: #0d1b2a;
+  --clef-claret: #b8233a;
+  --clef-gold: #d4af37;
+
+  --clef-stone-100: #ece9e1;
+  --clef-stone-300: #c8c2b4;
+  --clef-stone-600: #6b6558;
+  --clef-graphite-700: #2a2a2a;
+  --clef-graphite-500: #4a4a4a;
+
+  /* --- Brand font stacks --- */
+  --clef-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --clef-font-serif: "Crimson Pro", "Iowan Old Style", "Hoefler Text", Georgia,
+    serif;
+  --clef-font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* --- Map brand tokens onto Starlight's design system --- */
+/* Starlight ships its own light/dark CSS variables; we override them so the
+ * default theme picks up brand colors without forking the components. */
+
+:root[data-theme="light"] {
+  --sl-color-bg: var(--clef-ivory);
+  --sl-color-bg-nav: var(--clef-ivory);
+  --sl-color-bg-sidebar: var(--clef-ivory);
+  --sl-color-text: var(--clef-charcoal);
+  --sl-color-text-accent: var(--clef-claret);
+  --sl-color-accent: var(--clef-claret);
+  --sl-color-accent-high: var(--clef-claret);
+  --sl-color-accent-low: #f3d6db;
+  --sl-color-hairline: var(--clef-stone-300);
+  --sl-color-hairline-light: var(--clef-stone-100);
+}
+
+:root[data-theme="dark"] {
+  --sl-color-bg: var(--clef-charcoal);
+  --sl-color-bg-nav: var(--clef-charcoal);
+  --sl-color-bg-sidebar: var(--clef-charcoal);
+  --sl-color-text: var(--clef-ivory);
+  --sl-color-text-accent: var(--clef-claret);
+  --sl-color-accent: var(--clef-claret);
+  --sl-color-accent-high: var(--clef-gold);
+  --sl-color-accent-low: #3a151b;
+  --sl-color-hairline: var(--clef-graphite-500);
+  --sl-color-hairline-light: var(--clef-graphite-700);
+}
+
+:root {
+  --sl-font: var(--clef-font-sans);
+  --sl-font-system: var(--clef-font-sans);
+  --sl-font-system-mono: var(--clef-font-mono);
+}
+
+/* Headings carry the serif voice — except the page title, which stays sans
+ * so navigation context reads as UI, not editorial. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3 {
+  font-family: var(--clef-font-serif);
+  font-weight: 600;
+}
+
+.sl-markdown-content h2 {
+  letter-spacing: -0.01em;
+}
