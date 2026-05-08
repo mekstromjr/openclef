@@ -27,6 +27,10 @@ dependencies = [
     # Async filesystem IO for the LocalStorage backend; keeps PDF
     # uploads/streams off the event loop's blocking IO path.
     "aiofiles==24.1.0",
+    # Async S3 client used by S3Storage. Wraps botocore so the event
+    # loop stays unblocked under upload load (boto3-via-executor would
+    # tax the default thread pool).
+    "aioboto3==13.3.0",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +41,8 @@ dev = [
     "ruff==0.8.4",
     # Real Postgres for migration + FTS tests; matches prod's PG 16 image.
     # Redis for session-revocation + rate-limit integration tests.
-    "testcontainers[postgres,redis]==4.9.0",
+    # MinIO for S3Storage integration tests.
+    "testcontainers[postgres,redis,minio]==4.9.0",
     # factory-boy is sync; the data-model test layer wraps it for AsyncSession.
     "factory-boy==3.3.1",
 ]

@@ -18,20 +18,42 @@ from openclef.storage._protocol import (
     StorageMeta,
 )
 from openclef.storage.local import LocalStorage
+from openclef.storage.s3 import S3Storage
 
 
 def build_storage() -> Storage:
     s = get_settings()
     if s.storage_backend == "local":
         return LocalStorage(root=s.data_dir)
-    raise StorageError(
-        f"storage backend {s.storage_backend!r} not yet implemented (lands in next commit of ticket 0137)"
-    )
+    if s.storage_backend == "s3":
+        missing = [
+            name
+            for name, val in {
+                "OPENCLEF_S3_BUCKET": s.s3_bucket,
+                "OPENCLEF_S3_ACCESS_KEY": s.s3_access_key,
+                "OPENCLEF_S3_SECRET_KEY": s.s3_secret_key,
+            }.items()
+            if not val
+        ]
+        if missing:
+            raise StorageError(
+                f"storage_backend=s3 requires these env vars: {', '.join(missing)}"
+            )
+        return S3Storage(
+            bucket=s.s3_bucket,
+            endpoint_url=s.s3_endpoint,
+            region=s.s3_region,
+            access_key=s.s3_access_key,
+            secret_key=s.s3_secret_key,
+            path_style=s.s3_path_style,
+        )
+    raise StorageError(f"unknown storage backend: {s.storage_backend!r}")
 
 
 __all__ = [
     "KeyNotFoundError",
     "LocalStorage",
+    "S3Storage",
     "Storage",
     "StorageError",
     "StorageMeta",
