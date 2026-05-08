@@ -60,8 +60,10 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 
 try:
     from testcontainers.postgres import PostgresContainer
+    from testcontainers.redis import RedisContainer
 except Exception:  # pragma: no cover - import error path
     PostgresContainer = None
+    RedisContainer = None
 
 
 _ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
@@ -102,6 +104,40 @@ def apply_migrations(postgres_container, sync_database_url: str):
     cfg.set_main_option("sqlalchemy.url", sync_database_url)
     command.upgrade(cfg, "head")
     return True
+
+
+@pytest.fixture(scope="session")
+def redis_container():
+    if RedisContainer is None:
+        pytest.skip("testcontainers[redis] not importable")
+    try:
+        container = RedisContainer("redis:7.4-alpine")
+        container.start()
+    except Exception as exc:
+        pytest.skip(f"Docker unavailable for Redis testcontainer: {exc}")
+    yield container
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def redis_url(redis_container) -> str:
+    host = redis_container.get_container_host_ip()
+    port = redis_container.get_exposed_port(6379)
+    return f"redis://{host}:{port}/0"
+
+
+@pytest_asyncio.fixture
+async def redis_client(redis_url: str):
+    """Per-test Redis client with FLUSHDB on entry so buckets and
+    revocation sets don't leak between tests."""
+    from redis.asyncio import Redis
+
+    client = Redis.from_url(redis_url, decode_responses=False)
+    await client.flushdb()
+    try:
+        yield client
+    finally:
+        await client.aclose()
 
 
 @pytest_asyncio.fixture
