@@ -22,9 +22,20 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://openclef:openclef@localhost:5432/openclef"
     auto_migrate: bool = True
 
-    # Storage (Phase 1: stub — real backends arrive in ticket 0137)
+    # Storage backend selection (real backends ship in ticket 0137).
     storage_backend: Literal["local", "s3"] = "local"
     data_dir: Path = Path("/var/lib/openclef/data")
+    # S3 / S3-compatible (Garage, MinIO, B2, R2). Required when
+    # storage_backend == "s3". `s3_endpoint` empty = use AWS;
+    # `s3_path_style=True` is needed for Garage and most non-AWS S3.
+    s3_bucket: str | None = None
+    s3_endpoint: str | None = None
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_path_style: bool = False
+    # Thumbnail FS LRU cache (s3 backend only — no-op for local).
+    thumbnail_cache_mb: int = 500
 
     # Redis (Dramatiq broker — no jobs registered until later tickets;
     # also used for session revocation set + login rate-limit buckets)

@@ -52,6 +52,17 @@ services:
       # First-run admin bootstrap (optional). Both must be set.
       OPENCLEF_ADMIN_USER: ${OPENCLEF_ADMIN_USER:-}
       OPENCLEF_ADMIN_PASSWORD: ${OPENCLEF_ADMIN_PASSWORD:-}
+      # Storage backend selection. Default `local` writes under
+      # /app/data; set to `s3` and provide the OPENCLEF_S3_* vars to
+      # use an S3-compatible bucket (Garage, MinIO, B2, R2, AWS).
+      OPENCLEF_STORAGE_BACKEND: ${OPENCLEF_STORAGE_BACKEND:-local}
+      OPENCLEF_S3_BUCKET: ${OPENCLEF_S3_BUCKET:-}
+      OPENCLEF_S3_ENDPOINT: ${OPENCLEF_S3_ENDPOINT:-}
+      OPENCLEF_S3_REGION: ${OPENCLEF_S3_REGION:-us-east-1}
+      OPENCLEF_S3_ACCESS_KEY: ${OPENCLEF_S3_ACCESS_KEY:-}
+      OPENCLEF_S3_SECRET_KEY: ${OPENCLEF_S3_SECRET_KEY:-}
+      OPENCLEF_S3_PATH_STYLE: ${OPENCLEF_S3_PATH_STYLE:-false}
+      OPENCLEF_THUMBNAIL_CACHE_MB: ${OPENCLEF_THUMBNAIL_CACHE_MB:-500}
     volumes:
       - openclef-data:/app/data
 

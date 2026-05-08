@@ -65,6 +65,11 @@ except Exception:  # pragma: no cover - import error path
     PostgresContainer = None
     RedisContainer = None
 
+try:
+    from testcontainers.minio import MinioContainer
+except Exception:  # pragma: no cover
+    MinioContainer = None
+
 
 _ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
@@ -124,6 +129,36 @@ def redis_url(redis_container) -> str:
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     return f"redis://{host}:{port}/0"
+
+
+@pytest.fixture(scope="session")
+def minio_container():
+    if MinioContainer is None:
+        pytest.skip("testcontainers[minio] not importable")
+    try:
+        # Pin to a recent stable MinIO image; matches what we'd run in
+        # the meklab homelab as a Garage-compat fallback.
+        container = MinioContainer(image="minio/minio:RELEASE.2024-12-13T22-19-12Z")
+        container.start()
+    except Exception as exc:
+        pytest.skip(f"Docker unavailable for MinIO testcontainer: {exc}")
+    yield container
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def minio_config(minio_container) -> dict:
+    """Connection config for the MinIO testcontainer."""
+    cfg = minio_container.get_config()
+    # MinioContainer.get_config() returns
+    # {"endpoint": "host:port", "access_key": "...", "secret_key": "..."}
+    return {
+        "endpoint_url": f"http://{cfg['endpoint']}",
+        "access_key": cfg["access_key"],
+        "secret_key": cfg["secret_key"],
+        "region": "us-east-1",
+        "path_style": True,
+    }
 
 
 @pytest_asyncio.fixture
