@@ -1,93 +1,109 @@
-# openclef
+# OpenClef
 
-Open source, self-hosted, web-based sheet music library manager for performers.
+Open-source, self-hosted, web-based sheet music library manager for performers.
 
-## Getting started
+> **Status:** Phase 1 scaffolding (deployment baseline only — no domain features yet). See [openclef-phase-1 epic](https://gitlab.meklab.net/meklab/meklab/-/blob/main/vault/Epics/openclef-phase-1.md) for the roadmap.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## What it is (eventually)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+A library you can fill with PDFs of sheet music, search across by title / composer / arranger / instrumentation / tags, view in a browser at sight-reading quality, and (Phase 2) annotate, organize into setlists, and read in a performance-mode UI optimized for the music stand.
 
-## Add your files
+## What it is right now
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+A FastAPI + SvelteKit hello-world that boots cleanly against PostgreSQL + Redis and is deployable via Docker Compose. Every endpoint beyond `/health` and `/api/v1/version` is intentionally absent — the scaffolding is here so feature tickets have a known-good environment to extend.
 
+## Quickstart — Docker Compose
+
+```bash
+git clone ssh://git@gitlab.meklab.net:2222/meklab/openclef.git
+cd openclef
+docker compose up -d
 ```
-cd existing_repo
-git remote add origin https://gitlab.meklab.net/meklab/openclef.git
-git branch -M main
-git push -uf origin main
+
+The stack comes up healthy in about 15 seconds. Then:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","db":"connected","storage":"ok"}
+
+curl http://localhost:8000/api/v1/version
+# {"version":"dev","name":"openclef"}
+
+open http://localhost:8000/
 ```
 
-## Integrate with your tools
+Tear down with `docker compose down` (add `-v` to wipe the database volume).
 
-* [Set up project integrations](https://gitlab.meklab.net/meklab/openclef/-/settings/integrations)
+### What you get
 
-## Collaborate with your team
+| Service | Image | Port |
+|---|---|---|
+| `app` | built locally from `Dockerfile` | 8000 |
+| `postgres` | `postgres:16.6-alpine` | (internal) |
+| `redis` | `redis:7.4-alpine` | (internal) |
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+The app container runs `alembic upgrade head` on startup before exec'ing uvicorn. The Phase 1 baseline migration is empty — real schema arrives in [ticket 0135](https://gitlab.meklab.net/meklab/meklab/-/blob/main/vault/Stubs/0135-openclef-data-model.md).
 
-## Test and Deploy
+## Quickstart — Kubernetes (Helm)
 
-Use the built-in continuous integration in GitLab.
+Manifests live in `meklab-k8s/apps/openclef/` and are reconciled by Flux. The chart skeleton is **not yet shipped** — it lands in a follow-up commit on this same ticket. For now, Compose is the only supported deployment path.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Local development
 
-***
+### Backend (Python 3.12 + uv)
 
-# Editing this README
+```bash
+cd backend
+uv venv
+uv pip install -e ".[dev]"
+.venv/bin/pytest      # 3 smoke tests, all passing
+.venv/bin/uvicorn openclef.main:app --reload --port 8000
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Set `OPENCLEF_DATABASE_URL` and `OPENCLEF_REDIS_URL` to point at your local Postgres + Redis (or just bring them up via `docker compose up postgres redis`).
 
-## Suggestions for a good README
+### Frontend (Node 20 + SvelteKit 5)
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173, proxies /api → :8000
+npm run build    # writes static SPA to build/
+npm run check    # svelte-check + tsc
+```
 
-## Name
-Choose a self-explaining name for your project.
+The Vite dev server proxies `/api` and `/health` to `localhost:8000` so the SPA can fetch the FastAPI backend without CORS plumbing. In production the same FastAPI process serves both the static build (`build/` → `/app/static`) and the API on a single origin.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Configuration
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+All runtime config is read from `OPENCLEF_*` environment variables via Pydantic Settings. Defaults in [`backend/src/openclef/config.py`](backend/src/openclef/config.py).
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENCLEF_DATABASE_URL` | `postgresql+asyncpg://openclef:openclef@localhost:5432/openclef` | async SQLAlchemy URL |
+| `OPENCLEF_REDIS_URL` | `redis://localhost:6379/0` | Dramatiq broker (no jobs registered yet) |
+| `OPENCLEF_VERSION` | `dev` | exposed by `/api/v1/version`; CI sets to short SHA |
+| `OPENCLEF_ENV` | `dev` | `dev` / `staging` / `prod` |
+| `OPENCLEF_AUTO_MIGRATE` | `true` | run `alembic upgrade head` from entrypoint |
+| `OPENCLEF_DATA_DIR` | `/var/lib/openclef/data` | local storage backend root (Phase 1 stub) |
+| `OPENCLEF_STORAGE_BACKEND` | `local` | `local` or `s3` (S3 lands in ticket 0137) |
+| `OPENCLEF_STATIC_DIR` | `/app/static` | where FastAPI looks for the SvelteKit build |
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Tech stack
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+| Layer | Choice |
+|---|---|
+| Backend | Python 3.12 · FastAPI 0.115 · SQLAlchemy 2 async · Alembic · Pydantic 2 · structlog · Dramatiq+Redis |
+| Frontend | SvelteKit 5 · Vite 6 · Tailwind 4 · TypeScript |
+| PDF (future) | pdf.js (viewing) · pypdfium2 (server-side thumbs) · pypdf (metadata) |
+| Storage | swappable Local FS / S3-compatible (Garage, MinIO, AWS) |
+| Auth | Argon2id sessions; optional OIDC via authlib |
+| Deploy | Docker Compose · Helm chart for K3s |
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Apache 2.0 — see [LICENSE](LICENSE) (file landing alongside this README).
+
+## Contributing
+
+OpenClef is currently developed inside the [meklab homelab project](https://gitlab.meklab.net/meklab). External contributions aren't actively solicited yet, but the design intent is to be friendly to other self-hosters once Phase 1 is complete.
