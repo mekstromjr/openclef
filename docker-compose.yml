@@ -66,6 +66,19 @@ services:
     volumes:
       - openclef-data:/app/data
 
+  # Docs subsite — production-fidelity preview of the Astro Starlight build.
+  # Daily editing uses `npm run dev` in docs/; this service is opt-in via the
+  # `preview` profile so it stays out of the default `docker compose up` path.
+  # Useful for verifying the built artifact behaves the way prod will.
+  docs:
+    build:
+      context: ./docs
+      dockerfile: Dockerfile
+    profiles: [preview]
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   openclef-data:
