@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import OpenClefWordmark from '$lib/components/OpenClefWordmark.svelte';
 
   type VersionResponse = { version: string; name: string };
 
@@ -18,15 +19,15 @@
   });
 </script>
 
-<main class="min-h-screen flex items-center justify-center px-6">
+<main class="min-h-[80vh] flex items-center justify-center px-6">
   <div class="text-center space-y-6">
-    <h1 class="text-5xl font-semibold tracking-tight">OpenClef</h1>
-    <p class="text-zinc-400 text-lg">Self-hosted sheet music library</p>
-    <div class="text-sm font-mono text-zinc-500">
+    <OpenClefWordmark class="text-6xl" />
+    <p class="text-clef-stone-300 text-lg">Self-hosted sheet music library</p>
+    <div class="text-sm font-mono text-clef-stone-300/60">
       {#if error}
-        <span class="text-red-400">backend unreachable: {error}</span>
+        <span class="text-clef-claret">backend unreachable: {error}</span>
       {:else if version}
-        backend version: <span class="text-zinc-300">{version}</span>
+        backend version: <span class="text-clef-ivory">{version}</span>
       {:else}
         connecting…
       {/if}

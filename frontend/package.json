@@ -16,10 +16,17 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.10.2",
+    "mdsvex": "0.12.7",
     "svelte": "^5.16.0",
     "svelte-check": "^4.1.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
+  },
+  "dependencies": {
+    "@fontsource/crimson-pro": "5.2.8",
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "minisearch": "7.2.0"
   }
 }
