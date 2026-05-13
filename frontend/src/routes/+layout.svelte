@@ -4,12 +4,19 @@
   import { page } from '$app/state';
   import '../app.css';
   import AccountDropdown from '$lib/components/AccountDropdown.svelte';
+  import OpenClefWordmark from '$lib/components/OpenClefWordmark.svelte';
   import { authState, bootstrap } from '$lib/stores/auth.svelte';
 
   let { children } = $props();
 
   // Routes that don't require authentication. Anything else 401-redirects.
-  const PUBLIC_ROUTES = new Set(['/login', '/setup']);
+  // Docs are public so a user can read help and the brand guide without
+  // signing in (ticket 0153).
+  const PUBLIC_PREFIXES = ['/login', '/setup', '/docs'];
+
+  function isPublic(path: string): boolean {
+    return PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + '/'));
+  }
 
   onMount(async () => {
     await bootstrap();
@@ -29,7 +36,7 @@
       if (path !== '/setup') goto('/setup');
       return;
     }
-    if (!authState.user && !PUBLIC_ROUTES.has(path)) {
+    if (!authState.user && !isPublic(path)) {
       goto('/login');
       return;
     }
@@ -41,14 +48,20 @@
 </script>
 
 <div class="min-h-screen flex flex-col">
-  <header class="flex items-center justify-between px-6 py-3 border-b border-zinc-800">
-    <a href="/" class="text-lg font-semibold tracking-tight">OpenClef</a>
+  <header
+    class="flex items-center justify-between px-6 py-3 border-b border-clef-graphite-500"
+  >
+    <a href="/" class="text-lg" aria-label="OpenClef home">
+      <OpenClefWordmark />
+    </a>
     <AccountDropdown />
   </header>
 
   <main class="flex-1">
     {#if authState.loading}
-      <div class="min-h-[60vh] flex items-center justify-center text-zinc-500 text-sm">
+      <div
+        class="min-h-[60vh] flex items-center justify-center text-clef-stone-300/70 text-sm"
+      >
         Loading…
       </div>
     {:else}

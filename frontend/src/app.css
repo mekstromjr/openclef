@@ -1,11 +1,54 @@
 @import 'tailwindcss';
 
-/* Tailwind v4 CSS-first config. Theme tokens, custom utilities, and
- * dark-mode strategy live here rather than in tailwind.config.js.
- * Phase 1 ships the dark default; Tier 2 light-mode toggle lands in
- * ticket 0141. */
+/* OFL fonts bundled via @fontsource — license SIL OFL 1.1. Versions pinned
+ * to match the standalone docs site (ticket 0146). */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/crimson-pro/400.css';
+@import '@fontsource/crimson-pro/600.css';
+@import '@fontsource/crimson-pro/400-italic.css';
+@import '@fontsource/crimson-pro/600-italic.css';
+@import '@fontsource/jetbrains-mono/400.css';
+
+/* Tailwind v4 CSS-first theme tokens. Drives utilities like
+ * `bg-clef-charcoal`, `text-clef-claret`, `font-serif` (Crimson Pro).
+ *
+ * Brand source of truth: src/routes/docs/brand/color.md +
+ * src/routes/docs/brand/typography.md — keep tokens in sync there.
+ *
+ * Tier 2 light mode: ticket 0141. Light palette values are documented
+ * below for reference; the toggle mechanism is 0141's job.
+ *
+ *   Light palette (NOT currently active):
+ *     bg      = clef-ivory       (#F6F4EF)
+ *     fg      = clef-charcoal    (#111111)
+ *     muted   = clef-stone-600   (#6B6558)
+ *     border  = clef-stone-300   (#C8C2B4)
+ *     accent  = clef-claret      (#B8233A) — unchanged across modes
+ *     gold    = clef-gold        (#D4AF37) — unchanged across modes
+ */
 @theme {
-  --color-clef-bg: oklch(0.18 0 0);
-  --color-clef-fg: oklch(0.95 0 0);
-  --color-clef-accent: oklch(0.7 0.15 260);
+  /* Core brand palette */
+  --color-clef-charcoal: #111111;
+  --color-clef-ivory: #f6f4ef;
+  --color-clef-midnight: #0d1b2a;
+  --color-clef-claret: #b8233a;
+  --color-clef-gold: #d4af37;
+
+  /* Stone — warm neutrals, sit on Ivory */
+  --color-clef-stone-100: #ece9e1;
+  --color-clef-stone-300: #c8c2b4;
+  --color-clef-stone-600: #6b6558;
+
+  /* Graphite — cool neutrals, sit on Charcoal */
+  --color-clef-graphite-500: #4a4a4a;
+  --color-clef-graphite-700: #2a2a2a;
+
+  /* Font families — overrides Tailwind's `font-sans` / `font-serif` / `font-mono` */
+  --font-sans:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Crimson Pro', 'Iowan Old Style', 'Hoefler Text', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 }

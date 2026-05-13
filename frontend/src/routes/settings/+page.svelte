@@ -36,30 +36,30 @@
 
 <div class="max-w-xl mx-auto px-6 py-10 space-y-8">
   <header>
-    <h1 class="text-2xl font-semibold">Settings</h1>
-    <p class="text-sm text-zinc-500 mt-1">
+    <h1 class="text-2xl font-serif font-semibold">Settings</h1>
+    <p class="text-sm text-clef-stone-300/70 mt-1">
       Personal preferences. Library content settings live elsewhere.
     </p>
   </header>
 
   {#if error}
-    <div class="text-sm text-red-400">{error}</div>
+    <div class="text-sm text-clef-claret">{error}</div>
   {/if}
 
   {#if settings}
     <section class="space-y-3">
-      <h2 class="text-sm font-medium text-zinc-300">Appearance</h2>
+      <h2 class="text-sm font-medium text-clef-ivory">Appearance</h2>
       <label class="block text-sm">
-        <span class="text-zinc-400">Theme</span>
+        <span class="text-clef-stone-300">Theme</span>
         <select
           bind:value={settings.theme}
-          class="mt-1 w-48 px-3 py-2 rounded bg-zinc-950 border border-zinc-800"
+          class="mt-1 w-48 px-3 py-2 rounded bg-clef-charcoal border border-clef-graphite-500 focus:border-clef-claret focus:outline-none"
         >
           <option value="system">Follow system</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
-        <p class="mt-1 text-xs text-zinc-500">
+        <p class="mt-1 text-xs text-clef-stone-300/70">
           Page-level dark mode for sheet music arrives in a later release; this
           preference is stored now.
         </p>
@@ -67,16 +67,18 @@
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-sm font-medium text-zinc-300">Enrichment</h2>
+      <h2 class="text-sm font-medium text-clef-ivory">Enrichment</h2>
       <label class="flex items-start gap-3 text-sm">
         <input
           type="checkbox"
           bind:checked={settings.enrichment_default_enabled}
-          class="mt-0.5"
+          class="mt-0.5 accent-clef-claret"
         />
         <span>
-          <span class="text-zinc-200">Enable MusicBrainz enrichment by default</span>
-          <span class="block text-xs text-zinc-500">
+          <span class="text-clef-ivory"
+            >Enable MusicBrainz enrichment by default</span
+          >
+          <span class="block text-xs text-clef-stone-300/70">
             New uploads will look up composer + period information automatically.
           </span>
         </span>
@@ -87,14 +89,14 @@
       type="button"
       onclick={save}
       disabled={saving}
-      class="px-4 py-2 rounded bg-zinc-100 text-zinc-950 font-medium disabled:opacity-50"
+      class="px-4 py-2 rounded bg-clef-claret text-clef-ivory font-medium hover:bg-clef-claret/90 disabled:opacity-50"
     >
       {saving ? 'Saving…' : 'Save'}
     </button>
     {#if saved}
-      <span class="text-sm text-green-400 ml-3">Saved.</span>
+      <span class="text-sm text-clef-gold ml-3">Saved.</span>
     {/if}
   {:else if !error}
-    <div class="text-sm text-zinc-500">Loading…</div>
+    <div class="text-sm text-clef-stone-300/70">Loading…</div>
   {/if}
 </div>
