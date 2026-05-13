@@ -53,6 +53,14 @@ app = FastAPI(
     title="OpenClef",
     version=settings.version,
     lifespan=lifespan,
+    # `/docs` is the in-app user-facing documentation subtree served by
+    # the SvelteKit frontend (ticket 0153). Move FastAPI's Swagger / ReDoc
+    # / OpenAPI under `/api/` alongside the rest of the backend so the
+    # two don't collide. Anyone hitting `localhost:8000/docs` now gets
+    # the brand guide + user docs; the API surface lives at /api/docs.
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 app.include_router(auth_router.router)
