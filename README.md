@@ -17,10 +17,18 @@ A FastAPI + SvelteKit hello-world that boots cleanly against PostgreSQL + Redis 
 ```bash
 git clone ssh://git@gitlab.meklab.net:2222/meklab/openclef.git
 cd openclef
+cp .env.example .env
 docker compose up -d
 ```
 
-The stack comes up healthy in about 15 seconds. Then:
+The stack comes up healthy in about 15 seconds. The `.env` file bootstraps
+a dev admin (`admin` / `password`) on first run — explicitly weak, never
+use these values for anything but local development. See
+[`.env.example`](.env.example) for the full set of available variables.
+
+Sign in at `http://localhost:8000/login` with `admin` / `password`.
+
+Then:
 
 ```bash
 curl http://localhost:8000/health
