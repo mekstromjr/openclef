@@ -1,5 +1,9 @@
 # OpenClef
 
+> **Read-only mirror.** This project is developed on a self-hosted GitLab instance and
+> mirrored to GitHub for visibility. Issues and pull requests are not accepted here;
+> the mirror is overwritten on every push. Contact: see the profile of [@mekstromjr](https://github.com/mekstromjr).
+
 Open-source, self-hosted, web-based sheet music library manager for performers.
 
 > **Status:** Phase 1 scaffolding (deployment baseline only — no domain features yet). See [openclef-phase-1 epic](https://gitlab.meklab.net/meklab/meklab/-/blob/main/vault/Epics/openclef-phase-1.md) for the roadmap.
