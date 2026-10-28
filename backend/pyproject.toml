@@ -1,5 +1,6 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned: an unpinned hatchling broke the image build once (#54).
+requires = ["hatchling==1.33.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +8,6 @@ name = "openclef"
 version = "0.0.1"
 description = "Self-hosted sheet music library manager"
 requires-python = ">=3.12"
-readme = "../README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "meklab" }]
 
@@ -41,10 +41,13 @@ dev = [
     "ruff==0.8.4",
     # Real Postgres for migration + FTS tests; matches prod's PG 16 image.
     # Redis for session-revocation + rate-limit integration tests.
-    # MinIO for S3Storage integration tests.
-    "testcontainers[postgres,redis,minio]==4.9.0",
+    # S3Storage integration tests use a generic container (RustFS).
+    "testcontainers[postgres,redis]==4.9.0",
     # factory-boy is sync; the data-model test layer wraps it for AsyncSession.
     "factory-boy==3.3.1",
+    # Sync driver for Alembic's "postgresql://" path and the migration
+    # round-trip test; testcontainers does not pull it in.
+    "psycopg2-binary==2.9.13",
 ]
 
 [tool.hatch.build.targets.wheel]

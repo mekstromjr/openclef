@@ -21,9 +21,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# README.md is referenced by backend/pyproject.toml's `readme` field via
-# ../README.md — copy it into place so wheel build can resolve it.
-COPY README.md /README.md
 COPY backend/pyproject.toml backend/alembic.ini ./
 COPY backend/src ./src
 

@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from openclef.models.enums import Theme, UserRole
 from openclef.models.user import User, UserSettings
-from tests.factories import UserFactory, UserSettingsFactory, acreate, make_user
+from tests.factories import UserSettingsFactory, acreate, make_user
 
 
 async def test_user_round_trip(session):
@@ -28,7 +28,7 @@ async def test_username_is_case_insensitive_unique(session):
 
 async def test_user_settings_round_trip(session):
     user = await make_user(session)
-    settings = await acreate(session, UserSettingsFactory, user_id=user.id, theme=Theme.DARK)
+    await acreate(session, UserSettingsFactory, user_id=user.id, theme=Theme.DARK)
     fetched = (
         await session.execute(select(UserSettings).where(UserSettings.user_id == user.id))
     ).scalar_one()

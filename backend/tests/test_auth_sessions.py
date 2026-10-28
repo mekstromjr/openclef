@@ -5,7 +5,6 @@ Sign/parse tests are pure-Python and don't need Redis.
 """
 from __future__ import annotations
 
-import time
 import uuid
 
 import pytest

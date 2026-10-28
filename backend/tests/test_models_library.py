@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import select
 
 from openclef.models.enums import EditionType, KeySignature, PartType, Period
-from openclef.models.library import Arrangement, ArrangementTag, Part, Tag
+from openclef.models.library import Arrangement, ArrangementTag, Part
 from tests.factories import (
     ArrangementTagFactory,
     acreate,
