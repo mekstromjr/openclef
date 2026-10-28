@@ -5,6 +5,32 @@
 #
 # Versions per CLAUDE.md design principle 6: pin image minor/patch.
 
+x-openclef-env: &openclef-env
+  OPENCLEF_DATABASE_URL: postgresql+asyncpg://openclef:openclef@postgres:5432/openclef
+  OPENCLEF_REDIS_URL: redis://redis:6379/0
+  OPENCLEF_VERSION: ${OPENCLEF_VERSION:-dev}
+  OPENCLEF_ENV: ${OPENCLEF_ENV:-dev}
+  # Auth — pass through from host env so the operator can set them
+  # at compose-up time without editing this file. Production
+  # deployments should set OPENCLEF_PEPPER and OPENCLEF_SECRET_KEY.
+  OPENCLEF_PEPPER: ${OPENCLEF_PEPPER:-}
+  OPENCLEF_SECRET_KEY: ${OPENCLEF_SECRET_KEY:-}
+  # First-run admin bootstrap (optional). Both must be set.
+  OPENCLEF_ADMIN_USER: ${OPENCLEF_ADMIN_USER:-}
+  OPENCLEF_ADMIN_PASSWORD: ${OPENCLEF_ADMIN_PASSWORD:-}
+  # Storage backend selection. Default `local` writes under
+  # /app/data; set to `s3` and provide the OPENCLEF_S3_* vars to
+  # use an S3-compatible bucket (Garage, MinIO, B2, R2, AWS).
+  OPENCLEF_STORAGE_BACKEND: ${OPENCLEF_STORAGE_BACKEND:-local}
+  OPENCLEF_S3_BUCKET: ${OPENCLEF_S3_BUCKET:-}
+  OPENCLEF_S3_ENDPOINT: ${OPENCLEF_S3_ENDPOINT:-}
+  OPENCLEF_S3_REGION: ${OPENCLEF_S3_REGION:-us-east-1}
+  OPENCLEF_S3_ACCESS_KEY: ${OPENCLEF_S3_ACCESS_KEY:-}
+  OPENCLEF_S3_SECRET_KEY: ${OPENCLEF_S3_SECRET_KEY:-}
+  OPENCLEF_S3_PATH_STYLE: ${OPENCLEF_S3_PATH_STYLE:-false}
+  OPENCLEF_THUMBNAIL_CACHE_MB: ${OPENCLEF_THUMBNAIL_CACHE_MB:-500}
+  OPENCLEF_MAX_UPLOAD_MB: ${OPENCLEF_MAX_UPLOAD_MB:-100}
+
 services:
   postgres:
     image: postgres:16.6-alpine
@@ -39,30 +65,24 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    environment:
-      OPENCLEF_DATABASE_URL: postgresql+asyncpg://openclef:openclef@postgres:5432/openclef
-      OPENCLEF_REDIS_URL: redis://redis:6379/0
-      OPENCLEF_VERSION: ${OPENCLEF_VERSION:-dev}
-      OPENCLEF_ENV: ${OPENCLEF_ENV:-dev}
-      # Auth — pass through from host env so the operator can set them
-      # at compose-up time without editing this file. Production
-      # deployments should set OPENCLEF_PEPPER and OPENCLEF_SECRET_KEY.
-      OPENCLEF_PEPPER: ${OPENCLEF_PEPPER:-}
-      OPENCLEF_SECRET_KEY: ${OPENCLEF_SECRET_KEY:-}
-      # First-run admin bootstrap (optional). Both must be set.
-      OPENCLEF_ADMIN_USER: ${OPENCLEF_ADMIN_USER:-}
-      OPENCLEF_ADMIN_PASSWORD: ${OPENCLEF_ADMIN_PASSWORD:-}
-      # Storage backend selection. Default `local` writes under
-      # /app/data; set to `s3` and provide the OPENCLEF_S3_* vars to
-      # use an S3-compatible bucket (Garage, MinIO, B2, R2, AWS).
-      OPENCLEF_STORAGE_BACKEND: ${OPENCLEF_STORAGE_BACKEND:-local}
-      OPENCLEF_S3_BUCKET: ${OPENCLEF_S3_BUCKET:-}
-      OPENCLEF_S3_ENDPOINT: ${OPENCLEF_S3_ENDPOINT:-}
-      OPENCLEF_S3_REGION: ${OPENCLEF_S3_REGION:-us-east-1}
-      OPENCLEF_S3_ACCESS_KEY: ${OPENCLEF_S3_ACCESS_KEY:-}
-      OPENCLEF_S3_SECRET_KEY: ${OPENCLEF_S3_SECRET_KEY:-}
-      OPENCLEF_S3_PATH_STYLE: ${OPENCLEF_S3_PATH_STYLE:-false}
-      OPENCLEF_THUMBNAIL_CACHE_MB: ${OPENCLEF_THUMBNAIL_CACHE_MB:-500}
+    environment: *openclef-env
+    volumes:
+      - openclef-data:/app/data
+
+  # Background jobs (first-page thumbnails; enrichment later). Same image,
+  # same env, and the SAME data volume: with the local storage backend the
+  # API writes PDFs there and the worker reads them back.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      app:
+        condition: service_started
+    entrypoint: ["dramatiq", "openclef.workers.tasks", "--processes", "1", "--threads", "1"]
+    environment: *openclef-env
+    healthcheck:
+      disable: true
     volumes:
       - openclef-data:/app/data
 

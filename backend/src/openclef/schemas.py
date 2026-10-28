@@ -207,6 +207,20 @@ class PartCreate(BaseModel):
     file_hash_sha256: str | None = None
 
 
+class ArrangementUploadMetadata(ArrangementCreate):
+    """The `metadata` form field of an upload. Same fields as
+    ArrangementCreate, but `title` may be omitted: it then falls back to
+    the PDF's embedded Title, then to the file name."""
+
+    title: str | None = Field(default=None, min_length=1)
+
+
+class UploadResponse(BaseModel):
+    arrangement: ArrangementRead
+    part: PartRead
+    enrichment_job_id: uuid.UUID | None = None
+
+
 # --- Tag --------------------------------------------------------------
 
 
