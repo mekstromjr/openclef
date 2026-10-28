@@ -26,7 +26,7 @@ from pathlib import Path
 
 import aiofiles
 
-from openclef.storage._protocol import KeyNotFoundError, Storage, StorageMeta
+from openclef.storage._protocol import Storage, StorageMeta
 
 
 THUMBNAIL_PREFIX = "thumbnails/"

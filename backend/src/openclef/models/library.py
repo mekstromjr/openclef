@@ -23,7 +23,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from openclef.db import Base
 from openclef.models._types import pg_enum, utcnow_aware
 from openclef.models.enums import EditionType, KeySignature, PartType, Period
-from openclef.models.user import User
 
 
 class Arrangement(Base):

@@ -1,7 +1,8 @@
-"""Integration tests for openclef.storage.s3.S3Storage against MinIO.
+"""Integration tests for openclef.storage.s3.S3Storage against a real
+S3 server.
 
-The minio_container fixture (in conftest.py) spins up a real MinIO
-on first use. The session-scoped container is shared across tests
+The s3_container fixture (in conftest.py) spins up RustFS on first use
+(or uses the CI service). The session-scoped container is shared across tests
 in this module; per-test bucket creation gives isolation.
 """
 from __future__ import annotations
@@ -23,19 +24,19 @@ async def _stream(payload: bytes, chunk: int = 4096) -> AsyncIterator[bytes]:
 
 
 @pytest_asyncio.fixture
-async def s3(minio_config) -> S3Storage:
+async def s3(s3_config) -> S3Storage:
     bucket = f"openclef-test-{uuid.uuid4().hex[:8]}"
     # Create the bucket via aioboto3 directly (out-of-band setup).
     session = aioboto3.Session()
     async with session.client(
         "s3",
-        endpoint_url=minio_config["endpoint_url"],
-        region_name=minio_config["region"],
-        aws_access_key_id=minio_config["access_key"],
-        aws_secret_access_key=minio_config["secret_key"],
+        endpoint_url=s3_config["endpoint_url"],
+        region_name=s3_config["region"],
+        aws_access_key_id=s3_config["access_key"],
+        aws_secret_access_key=s3_config["secret_key"],
     ) as client:
         await client.create_bucket(Bucket=bucket)
-    return S3Storage(bucket=bucket, **minio_config)
+    return S3Storage(bucket=bucket, **s3_config)
 
 
 async def test_put_then_get_round_trip(s3):
@@ -93,6 +94,6 @@ async def test_ping_true_for_existing_bucket(s3):
     assert await s3.ping() is True
 
 
-async def test_ping_false_for_missing_bucket(minio_config):
-    bad = S3Storage(bucket="this-bucket-does-not-exist", **minio_config)
+async def test_ping_false_for_missing_bucket(s3_config):
+    bad = S3Storage(bucket="this-bucket-does-not-exist", **s3_config)
     assert await bad.ping() is False

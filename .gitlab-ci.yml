@@ -2,6 +2,7 @@
 #
 # Stages:
 #   - test:  Secret Detection (GitLab template; fast, catches committed creds)
+#            + ruff and the backend pytest suite against service containers
 #   - build: Kaniko → pushes image to registry.meklab.net/meklab/openclef
 #
 # Image tags produced:
@@ -83,6 +84,51 @@ docs:build:
         - .gitlab-ci.yml
       when: always
     - if: $CI_COMMIT_TAG
+      when: always
+    - when: never
+
+# Lint + the full backend suite. The runner can't start testcontainers (no
+# Docker daemon in the job pod), so Postgres, Redis and an S3 server (RustFS)
+# run as job services and conftest picks them up from OPENCLEF_TEST_*.
+# Versions match the testcontainers images in backend/tests/conftest.py.
+# The credentials below exist only inside this throwaway job pod.
+test:backend:
+  stage: test
+  image: ghcr.io/astral-sh/uv:0.11.3-debian-slim
+  tags:
+    - meklab-k3s
+  services:
+    - name: postgres:16.6-alpine
+      alias: postgres
+    - name: redis:7.4-alpine
+      alias: redis
+    - name: rustfs/rustfs:1.0.1
+      alias: s3
+  variables:
+    POSTGRES_DB: openclef_test
+    POSTGRES_USER: openclef
+    POSTGRES_PASSWORD: openclef
+    RUSTFS_ACCESS_KEY: openclef-ci
+    RUSTFS_SECRET_KEY: openclef-ci-only
+    OPENCLEF_TEST_DATABASE_URL: "postgresql+asyncpg://openclef:openclef@postgres:5432/openclef_test"
+    OPENCLEF_TEST_REDIS_URL: "redis://redis:6379/0"
+    OPENCLEF_TEST_S3_ENDPOINT: "http://s3:9000"
+    OPENCLEF_TEST_S3_ACCESS_KEY: openclef-ci
+    OPENCLEF_TEST_S3_SECRET_KEY: openclef-ci-only
+  script:
+    - cd backend
+    - uv python install 3.12
+    - uv venv -p 3.12
+    - uv pip install -e '.[dev]'
+    - uv run --no-sync ruff check src tests
+    # -rs lists any skipped test, so a silently skipped DB suite shows up in the log.
+    - uv run --no-sync pytest -q -rs
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
       when: always
     - when: never
 

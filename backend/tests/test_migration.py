@@ -9,12 +9,14 @@ test postgres) so the destructive downgrade can't poison other tests.
 """
 from __future__ import annotations
 
+import os
+import uuid
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, make_url, text
 
 # DOCKER_HOST is patched in conftest._ensure_docker_host before this
 # module imports testcontainers. Importing here is fine.
@@ -28,7 +30,28 @@ _ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
 
 @pytest.fixture(scope="module")
-def fresh_postgres():
+def fresh_database_url():
+    """Sync URL of an empty database this module may destroy.
+
+    In CI (OPENCLEF_TEST_DATABASE_URL set) a scratch database is created on
+    the shared service Postgres and dropped afterwards; locally a dedicated
+    container is started.
+    """
+    external_url = os.environ.get("OPENCLEF_TEST_DATABASE_URL")
+    if external_url:
+        server_url = make_url(external_url.replace("+asyncpg", ""))
+        scratch_name = f"openclef_migration_{uuid.uuid4().hex[:8]}"
+        admin_engine = create_engine(server_url, isolation_level="AUTOCOMMIT")
+        with admin_engine.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{scratch_name}"'))
+        try:
+            yield server_url.set(database=scratch_name).render_as_string(hide_password=False)
+        finally:
+            with admin_engine.connect() as conn:
+                conn.execute(text(f'DROP DATABASE IF EXISTS "{scratch_name}" WITH (FORCE)'))
+            admin_engine.dispose()
+        return
+
     if PostgresContainer is None:
         pytest.skip("testcontainers not importable")
     try:
@@ -36,12 +59,12 @@ def fresh_postgres():
         container.start()
     except Exception as exc:
         pytest.skip(f"Docker unavailable: {exc}")
-    yield container
+    yield container.get_connection_url()
     container.stop()
 
 
-def test_upgrade_then_downgrade_is_clean(fresh_postgres):
-    sync_url = fresh_postgres.get_connection_url()
+def test_upgrade_then_downgrade_is_clean(fresh_database_url):
+    sync_url = fresh_database_url
     cfg = Config(str(_ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", sync_url)
 

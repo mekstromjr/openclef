@@ -10,6 +10,16 @@ loop" error.
 
 Skipped automatically (with a clear marker) when Docker isn't
 reachable, so simple unit tests still run on machines without Docker.
+
+In CI there is no Docker daemon to start containers from, so the
+pipeline provides Postgres, Redis and an S3 server (RustFS) as job services and points
+the tests at them with these variables (each one replaces its
+container; unset means "start a testcontainer"):
+
+    OPENCLEF_TEST_DATABASE_URL   postgresql+asyncpg://user:pass@host:5432/db
+    OPENCLEF_TEST_REDIS_URL      redis://host:6379/0
+    OPENCLEF_TEST_S3_ENDPOINT    http://host:9000
+    OPENCLEF_TEST_S3_ACCESS_KEY / OPENCLEF_TEST_S3_SECRET_KEY
 """
 from __future__ import annotations
 
@@ -66,16 +76,23 @@ except Exception:  # pragma: no cover - import error path
     RedisContainer = None
 
 try:
-    from testcontainers.minio import MinioContainer
+    from testcontainers.core.container import DockerContainer
 except Exception:  # pragma: no cover
-    MinioContainer = None
+    DockerContainer = None
 
 
 _ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
+EXTERNAL_DATABASE_URL = os.environ.get("OPENCLEF_TEST_DATABASE_URL")
+EXTERNAL_REDIS_URL = os.environ.get("OPENCLEF_TEST_REDIS_URL")
+EXTERNAL_S3_ENDPOINT = os.environ.get("OPENCLEF_TEST_S3_ENDPOINT")
+
 
 @pytest.fixture(scope="session")
 def postgres_container():
+    if EXTERNAL_DATABASE_URL:
+        yield None
+        return
     if PostgresContainer is None:
         pytest.skip("testcontainers not importable")
     try:
@@ -90,6 +107,8 @@ def postgres_container():
 @pytest.fixture(scope="session")
 def database_url(postgres_container) -> str:
     """Async URL (postgresql+asyncpg://...) usable by the test engine."""
+    if EXTERNAL_DATABASE_URL:
+        return EXTERNAL_DATABASE_URL
     return postgres_container.get_connection_url()
 
 
@@ -113,6 +132,9 @@ def apply_migrations(postgres_container, sync_database_url: str):
 
 @pytest.fixture(scope="session")
 def redis_container():
+    if EXTERNAL_REDIS_URL:
+        yield None
+        return
     if RedisContainer is None:
         pytest.skip("testcontainers[redis] not importable")
     try:
@@ -126,36 +148,80 @@ def redis_container():
 
 @pytest.fixture(scope="session")
 def redis_url(redis_container) -> str:
+    if EXTERNAL_REDIS_URL:
+        return EXTERNAL_REDIS_URL
     host = redis_container.get_container_host_ip()
     port = redis_container.get_exposed_port(6379)
     return f"redis://{host}:{port}/0"
 
 
+# RustFS stands in for S3: MinIO images were pulled from Docker Hub and quay,
+# and Garage needs a config file a CI service can't be given. Same image in CI.
+S3_TEST_IMAGE = "rustfs/rustfs:1.0.1"
+S3_TEST_ACCESS_KEY = "openclef-test"
+S3_TEST_SECRET_KEY = "openclef-test-only"
+
+
+def _wait_for_http(url: str, timeout_seconds: float = 30.0) -> None:
+    """Block until `url` answers with any HTTP status (403 counts as up)."""
+    import time
+    import urllib.error
+    import urllib.request
+
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            return
+        except urllib.error.HTTPError:
+            return
+        except OSError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.5)
+
+
 @pytest.fixture(scope="session")
-def minio_container():
-    if MinioContainer is None:
-        pytest.skip("testcontainers[minio] not importable")
+def s3_container():
+    if EXTERNAL_S3_ENDPOINT:
+        _wait_for_http(EXTERNAL_S3_ENDPOINT)
+        yield None
+        return
+    if DockerContainer is None:
+        pytest.skip("testcontainers not importable")
     try:
-        # Pin to a recent stable MinIO image; matches what we'd run in
-        # the meklab homelab as a Garage-compat fallback.
-        container = MinioContainer(image="minio/minio:RELEASE.2024-12-13T22-19-12Z")
+        container = (
+            DockerContainer(S3_TEST_IMAGE)
+            .with_env("RUSTFS_ACCESS_KEY", S3_TEST_ACCESS_KEY)
+            .with_env("RUSTFS_SECRET_KEY", S3_TEST_SECRET_KEY)
+            .with_exposed_ports(9000)
+        )
         container.start()
     except Exception as exc:
-        pytest.skip(f"Docker unavailable for MinIO testcontainer: {exc}")
+        pytest.skip(f"Docker unavailable for S3 testcontainer: {exc}")
+    host = container.get_container_host_ip()
+    port = container.get_exposed_port(9000)
+    container.endpoint_url = f"http://{host}:{port}"
+    _wait_for_http(container.endpoint_url)
     yield container
     container.stop()
 
 
 @pytest.fixture(scope="session")
-def minio_config(minio_container) -> dict:
-    """Connection config for the MinIO testcontainer."""
-    cfg = minio_container.get_config()
-    # MinioContainer.get_config() returns
-    # {"endpoint": "host:port", "access_key": "...", "secret_key": "..."}
+def s3_config(s3_container) -> dict:
+    """Connection kwargs for S3Storage, from the testcontainer or the CI service."""
+    if EXTERNAL_S3_ENDPOINT:
+        return {
+            "endpoint_url": EXTERNAL_S3_ENDPOINT,
+            "access_key": os.environ["OPENCLEF_TEST_S3_ACCESS_KEY"],
+            "secret_key": os.environ["OPENCLEF_TEST_S3_SECRET_KEY"],
+            "region": "us-east-1",
+            "path_style": True,
+        }
     return {
-        "endpoint_url": f"http://{cfg['endpoint']}",
-        "access_key": cfg["access_key"],
-        "secret_key": cfg["secret_key"],
+        "endpoint_url": s3_container.endpoint_url,
+        "access_key": S3_TEST_ACCESS_KEY,
+        "secret_key": S3_TEST_SECRET_KEY,
         "region": "us-east-1",
         "path_style": True,
     }

@@ -1,10 +1,9 @@
 """End-to-end tests for /api/v1/users (admin CRUD + /me/settings)."""
 from __future__ import annotations
 
-import uuid
 
 from openclef.auth.hashing import hash_password
-from openclef.models.enums import Theme, UserRole
+from openclef.models.enums import UserRole
 from openclef.models.library import Arrangement
 from openclef.models.user import User
 

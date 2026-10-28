@@ -7,7 +7,6 @@ key-escape rejection, and idempotent delete.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from pathlib import Path
 
 import pytest
 
