@@ -58,6 +58,11 @@ def _ensure_docker_host() -> None:
 
 _ensure_docker_host()
 
+# Dramatiq actors bind to the broker that is current when they are
+# decorated, so the in-memory stub must be chosen before anything imports
+# openclef.workers.tasks (main.py does, via the arrangements router).
+os.environ["OPENCLEF_WORKER_BROKER"] = "stub"
+
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from alembic import command  # noqa: E402
@@ -243,7 +248,7 @@ async def redis_client(redis_url: str):
 
 @pytest_asyncio.fixture
 async def app_kit(
-    database_url: str, redis_url: str, apply_migrations, monkeypatch
+    database_url: str, redis_url: str, apply_migrations, monkeypatch, tmp_path
 ):
     """FastAPI test kit: AsyncClient + a sessionmaker that commits.
 
@@ -266,6 +271,10 @@ async def app_kit(
     monkeypatch.setenv("OPENCLEF_ARGON2_MEMORY_COST", "8192")
     monkeypatch.setenv("OPENCLEF_ARGON2_PARALLELISM", "1")
     monkeypatch.setenv("OPENCLEF_ENV", "dev")
+    # Local storage in a per-test dir; the worker builds its own storage
+    # from these same settings, so both sides see the same files.
+    monkeypatch.setenv("OPENCLEF_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("OPENCLEF_DATA_DIR", str(tmp_path))
 
     from dataclasses import dataclass
 
@@ -277,6 +286,8 @@ async def app_kit(
     from openclef import main as app_main
     from openclef.auth.deps import get_redis
     from openclef.db import get_session
+    from openclef.storage import LocalStorage
+    from openclef.workers import broker
 
     test_engine = create_async_engine(database_url, future=True)
     TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
@@ -310,16 +321,23 @@ async def app_kit(
     app_main.app.dependency_overrides[get_session] = _override_session
     app_main.app.dependency_overrides[get_redis] = _override_redis
     app_main.app.state.redis = test_redis
+    app_main.app.state.storage = LocalStorage(root=tmp_path)
+    broker.flush_all()
 
     @dataclass
     class AppKit:
         client: AsyncClient
         sessionmaker: async_sessionmaker
+        storage: LocalStorage
 
     transport = ASGITransport(app=app_main.app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield AppKit(client=client, sessionmaker=TestSession)
+            yield AppKit(
+                client=client,
+                sessionmaker=TestSession,
+                storage=app_main.app.state.storage,
+            )
     finally:
         app_main.app.dependency_overrides.clear()
         await test_redis.aclose()

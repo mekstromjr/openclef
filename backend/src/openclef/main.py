@@ -4,7 +4,7 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -12,7 +12,9 @@ from sqlalchemy import text
 from openclef.auth.bootstrap import maybe_bootstrap_admin
 from openclef.config import get_settings
 from openclef.db import engine
+from openclef.routers import arrangements as arrangements_router
 from openclef.routers import auth as auth_router
+from openclef.routers import parts as parts_router
 from openclef.routers import setup as setup_router
 from openclef.routers import users as users_router
 from openclef.storage import build_storage
@@ -63,9 +65,40 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
+
+class UploadSizeLimit:
+    """Refuse oversized uploads from Content-Length, before FastAPI parses
+    (and spools to disk) the multipart body. The upload handlers re-check
+    the real byte count, which also covers bodies sent without a length."""
+
+    # Multipart framing and the small form fields ride on top of the file.
+    OVERHEAD_BYTES = 1024 * 1024
+
+    def __init__(self, app, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes + self.OVERHEAD_BYTES
+
+    async def __call__(self, scope, receive, send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope["method"] == "POST"
+            and scope["path"].startswith("/api/v1/arrangements")
+        ):
+            length = dict(scope["headers"]).get(b"content-length", b"")
+            if length.isdigit() and int(length) > self.max_bytes:
+                response = JSONResponse({"detail": "upload_too_large"}, status_code=413)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(UploadSizeLimit, max_bytes=settings.max_upload_mb * 1024 * 1024)
+
 app.include_router(auth_router.router)
 app.include_router(setup_router.router)
 app.include_router(users_router.router)
+app.include_router(arrangements_router.router)
+app.include_router(parts_router.router)
 
 
 async def _check_db() -> bool:

@@ -31,6 +31,14 @@ dependencies = [
     # loop stays unblocked under upload load (boto3-via-executor would
     # tax the default thread pool).
     "aioboto3==13.3.0",
+    # PDF page count + embedded Info/XMP metadata at upload time (pure Python).
+    "pypdf==6.20.1",
+    # First-page thumbnail render in the Dramatiq worker (bundles PDFium).
+    "pypdfium2==5.14.0",
+    # PNG encoding for rendered thumbnails.
+    "pillow==12.3.0",
+    # Multipart form parsing for PDF uploads (FastAPI File/Form).
+    "python-multipart==0.0.32",
 ]
 
 [project.optional-dependencies]

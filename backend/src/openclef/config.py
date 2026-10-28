@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # Thumbnail FS LRU cache (s3 backend only — no-op for local).
     thumbnail_cache_mb: int = 500
 
+    # --- Uploads + thumbnails ---
+    # Hard cap per uploaded PDF. Checked against Content-Length before the
+    # body is read, then again on the actual byte count.
+    max_upload_mb: int = 100
+    upload_chunk_bytes: int = 1024 * 1024
+    # Width of the first-page thumbnail PNG the worker renders.
+    thumbnail_width_px: int = 600
+    # Dramatiq broker. "stub" keeps jobs in memory (tests only).
+    worker_broker: Literal["redis", "stub"] = "redis"
+
     # Redis (Dramatiq broker — no jobs registered until later tickets;
     # also used for session revocation set + login rate-limit buckets)
     redis_url: str = "redis://localhost:6379/0"
