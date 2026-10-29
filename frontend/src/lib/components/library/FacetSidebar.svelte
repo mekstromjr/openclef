@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FacetCount, FacetName } from '$lib/api';
+  import { formatKey, type FacetCount, type FacetName } from '$lib/api';
 
   let {
     facets,
@@ -21,7 +21,8 @@
   ];
 
   function display(name: FacetName, value: string): string {
-    return name === 'difficulty' ? '★'.repeat(Number(value)) : value;
+    if (name === 'difficulty') return '★'.repeat(Number(value));
+    return name === 'key' ? formatKey(value) : value;
   }
 </script>
 
