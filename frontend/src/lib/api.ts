@@ -67,3 +67,118 @@ export interface UserSettings {
 export interface SetupStatus {
   users_exist: boolean;
 }
+
+// --- Library ---
+
+export const KEY_SIGNATURES = [
+  'C major', 'G major', 'D major', 'A major', 'E major', 'B major', 'F# major',
+  'Db major', 'Ab major', 'Eb major', 'Bb major', 'F major',
+  'A minor', 'E minor', 'B minor', 'F# minor', 'C# minor', 'G# minor',
+  'Eb minor', 'Bb minor', 'F minor', 'C minor', 'G minor', 'D minor',
+  'Atonal', 'Modal', 'None', 'Multiple'
+] as const;
+
+export const PART_TYPES = [
+  'Full Score', 'Conductor Score', 'Piano Reduction', 'Vocal Score', 'Other'
+] as const;
+
+export type PartType = (typeof PART_TYPES)[number];
+
+export interface ArrangementSummary {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  composer: string[];
+  arranger: string[];
+  instrumentation: string[];
+  key_signature: string | null;
+  period: string | null;
+  difficulty: number | null;
+  created_at: string;
+  part_count: number;
+  cover_part_id: string | null;
+  cover_thumbnail_ready: boolean;
+}
+
+export interface FacetCount {
+  value: string;
+  count: number;
+}
+
+export type FacetName = 'instrument' | 'composer' | 'key' | 'period' | 'difficulty' | 'tag';
+
+export interface ArrangementList {
+  items: ArrangementSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  facets: Record<FacetName, FacetCount[]>;
+}
+
+export interface UploadMetadata {
+  title?: string;
+  composer?: string[];
+  arranger?: string[];
+  instrumentation?: string[];
+  key_signature?: string;
+  difficulty?: number;
+}
+
+/**
+ * Upload one PDF as a new arrangement. Uses XMLHttpRequest rather than
+ * fetch because fetch can't report upload progress.
+ */
+export function uploadArrangement(
+  file: File,
+  options: { metadata?: UploadMetadata; partType?: PartType; onProgress?: (fraction: number) => void }
+): Promise<{ arrangement: { id: string; title: string } }> {
+  const form = new FormData();
+  form.append('file', file);
+  if (options.metadata && Object.keys(options.metadata).length > 0) {
+    form.append('metadata', JSON.stringify(options.metadata));
+  }
+  if (options.partType) form.append('part_type', options.partType);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/v1/arrangements/upload');
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON error body */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload as { arrangement: { id: string; title: string } });
+      } else {
+        reject(new ApiError(xhr.status, (payload as { detail?: unknown })?.detail ?? xhr.statusText));
+      }
+    };
+    xhr.onerror = () => reject(new ApiError(0, 'network_error'));
+    xhr.send(form);
+  });
+}
+
+/** Human-readable message for an upload failure. */
+export function uploadErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) return 'Upload failed.';
+  switch (error.status) {
+    case 0:
+      return 'Network error. Check your connection and try again.';
+    case 401:
+      return 'Your session expired. Sign in again.';
+    case 413:
+      return 'This PDF is larger than the upload limit.';
+    case 415:
+      return error.detail === 'not_a_pdf'
+        ? 'This file is not a PDF.'
+        : 'This PDF could not be read. It may be damaged.';
+    default:
+      return `Upload failed (${error.status}).`;
+  }
+}

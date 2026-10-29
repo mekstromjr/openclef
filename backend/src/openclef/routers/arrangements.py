@@ -7,13 +7,14 @@ an upload returns as soon as the file is safely stored.
 from __future__ import annotations
 
 import uuid
+from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -21,16 +22,20 @@ from openclef.auth.deps import get_current_user
 from openclef.config import get_settings
 from openclef.db import get_session
 from openclef.models.enrichment import EnrichmentJob
-from openclef.models.enums import EnrichmentJobStatus, PartType, UserRole
+from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period, UserRole
 from openclef.models.library import Arrangement, Part
 from openclef.models.user import User, UserSettings
 from openclef.routers._deps import get_storage
 from openclef.schemas import (
+    ArrangementList,
     ArrangementRead,
+    ArrangementSummary,
+    FacetCount,
     ArrangementUploadMetadata,
     PartRead,
     UploadResponse,
 )
+from openclef.services.library_search import LibraryFilters, facet_queries, order_by
 from openclef.services.pdf_meta import InvalidPdfError
 from openclef.services.uploads import (
     CheckedUpload,
@@ -107,6 +112,78 @@ def _part_label(label: str | None, instrument: str | None, part_type: PartType) 
     if instrument and instrument.strip():
         return instrument.strip()
     return part_type.value
+
+
+def _facet_value(value: object) -> str:
+    return value.value if isinstance(value, Enum) else str(value)
+
+
+@router.get("", response_model=ArrangementList)
+async def list_arrangements(
+    _user: CurrentUser,
+    db: DbSession,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    instrument: Annotated[list[str], Query()] = [],  # noqa: B006 (FastAPI copies it)
+    composer: str | None = None,
+    key: KeySignature | None = None,
+    period: Period | None = None,
+    difficulty: Annotated[int | None, Query(ge=1, le=5)] = None,
+    tag: str | None = None,
+    sort: Literal["relevance", "title", "recent"] = "relevance",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 24,
+) -> ArrangementList:
+    """The library: search, filter, and facet counts for the sidebar.
+    Default order is search relevance when searching, newest otherwise."""
+    filters = LibraryFilters(
+        q=q, instrument=instrument, composer=composer, key=key,
+        period=period, difficulty=difficulty, tag=tag,
+    )
+    where = and_(True, *filters.conditions())
+    total = (await db.execute(select(func.count()).select_from(Arrangement).where(where))).scalar_one()
+    rows = (
+        await db.execute(
+            select(Arrangement)
+            .where(where)
+            .order_by(*order_by(filters, sort))
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+    ).scalars().all()
+
+    parts_by_arrangement: dict[uuid.UUID, list[tuple]] = {}
+    if rows:
+        part_rows = await db.execute(
+            select(Part.arrangement_id, Part.id, Part.thumbnail_storage_key)
+            .where(Part.arrangement_id.in_([row.id for row in rows]))
+            .order_by(Part.created_at, Part.id)
+        )
+        for arrangement_id, part_id, thumb in part_rows:
+            parts_by_arrangement.setdefault(arrangement_id, []).append((part_id, thumb))
+
+    items = []
+    for row in rows:
+        parts = parts_by_arrangement.get(row.id, [])
+        cover = parts[0] if parts else None
+        items.append(
+            ArrangementSummary(
+                id=row.id, title=row.title, subtitle=row.subtitle,
+                composer=row.composer, arranger=row.arranger,
+                instrumentation=row.instrumentation, key_signature=row.key_signature,
+                period=row.period, difficulty=row.difficulty, created_at=row.created_at,
+                part_count=len(parts),
+                cover_part_id=cover[0] if cover else None,
+                cover_thumbnail_ready=bool(cover and cover[1]),
+            )
+        )
+
+    facets = {}
+    for name, query in facet_queries(filters).items():
+        facets[name] = [
+            FacetCount(value=_facet_value(value), count=count)
+            for value, count in (await db.execute(query)).all()
+        ]
+    return ArrangementList(items=items, total=total, page=page, page_size=page_size, facets=facets)
 
 
 @router.post("/upload", response_model=UploadResponse, status_code=201)

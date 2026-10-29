@@ -68,6 +68,8 @@ asyncio_mode = "auto"
 # container, alembic upgrade) don't need a loop at all.
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# A test stuck this long dumps every thread's stack instead of hanging silently.
+faulthandler_timeout = 120
 pythonpath = ["src"]
 
 [tool.ruff]
