@@ -221,6 +221,40 @@ class UploadResponse(BaseModel):
     enrichment_job_id: uuid.UUID | None = None
 
 
+class ArrangementSummary(BaseModel):
+    """One library card: the searchable fields plus what the card shows."""
+
+    id: uuid.UUID
+    title: str
+    subtitle: str | None
+    composer: list[str]
+    arranger: list[str]
+    instrumentation: list[str]
+    key_signature: KeySignature | None
+    period: Period | None
+    difficulty: int | None
+    created_at: datetime
+    part_count: int
+    # First-uploaded part: its PDF opens from the card, its thumbnail is the cover.
+    cover_part_id: uuid.UUID | None
+    cover_thumbnail_ready: bool
+
+
+class FacetCount(BaseModel):
+    value: str
+    count: int
+
+
+class ArrangementList(BaseModel):
+    items: list[ArrangementSummary]
+    total: int
+    page: int
+    page_size: int
+    # Each facet is counted with every OTHER active filter applied, so the
+    # sidebar still shows the alternatives to a value already selected.
+    facets: dict[str, list[FacetCount]]
+
+
 # --- Tag --------------------------------------------------------------
 
 
