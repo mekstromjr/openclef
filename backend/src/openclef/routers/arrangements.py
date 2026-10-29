@@ -15,6 +15,8 @@ import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import and_, func, select
+from sqlalchemy import delete as sql_delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -23,13 +25,16 @@ from openclef.config import get_settings
 from openclef.db import get_session
 from openclef.models.enrichment import EnrichmentJob
 from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period, UserRole
-from openclef.models.library import Arrangement, Part
+from openclef.models.library import Arrangement, ArrangementTag, Part, Tag
+from openclef.models.setlist import SetlistItem
 from openclef.models.user import User, UserSettings
 from openclef.routers._deps import get_storage
 from openclef.schemas import (
+    ArrangementDetail,
     ArrangementList,
     ArrangementRead,
     ArrangementSummary,
+    ArrangementUpdate,
     FacetCount,
     ArrangementUploadMetadata,
     PartRead,
@@ -339,5 +344,103 @@ async def delete_part(
     keys = (part.storage_key, part.thumbnail_storage_key or thumbnail_key(part_id))
     await db.delete(part)
     await db.commit()
+    await _delete_quietly(storage, *keys)
+    return Response(status_code=204)
+
+
+async def _load_arrangement(db: AsyncSession, arrangement_id: uuid.UUID) -> Arrangement:
+    arrangement = await db.get(Arrangement, arrangement_id)
+    if arrangement is None:
+        raise HTTPException(status_code=404, detail="arrangement_not_found")
+    return arrangement
+
+
+async def _detail(db: AsyncSession, arrangement: Arrangement) -> ArrangementDetail:
+    parts = (
+        await db.execute(
+            select(Part)
+            .where(Part.arrangement_id == arrangement.id)
+            .order_by(Part.created_at, Part.id)
+        )
+    ).scalars().all()
+    tags = (
+        await db.execute(
+            select(Tag.name)
+            .join(ArrangementTag, ArrangementTag.tag_id == Tag.id)
+            .where(ArrangementTag.arrangement_id == arrangement.id)
+            .order_by(Tag.name)
+        )
+    ).scalars().all()
+    return ArrangementDetail(
+        **ArrangementRead.model_validate(arrangement).model_dump(),
+        parts=[PartRead.model_validate(part) for part in parts],
+        tags=list(tags),
+    )
+
+
+@router.get("/{arrangement_id}", response_model=ArrangementDetail)
+async def get_arrangement(
+    arrangement_id: uuid.UUID, _user: CurrentUser, db: DbSession
+) -> ArrangementDetail:
+    return await _detail(db, await _load_arrangement(db, arrangement_id))
+
+
+@router.patch("/{arrangement_id}", response_model=ArrangementDetail)
+async def update_arrangement(
+    arrangement_id: uuid.UUID, payload: ArrangementUpdate, _user: CurrentUser, db: DbSession
+) -> ArrangementDetail:
+    """Edit metadata. Any member may: the library is shared, and fixing a
+    typo shouldn't need the uploader. Edited fields are marked as user-set
+    so later enrichment never overwrites them."""
+    arrangement = await _load_arrangement(db, arrangement_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if "title" in changes and not changes["title"]:
+        raise HTTPException(status_code=422, detail="title_required")
+    for name, value in changes.items():
+        setattr(arrangement, name, value)
+    if changes:
+        origins = dict(arrangement.field_origins_jsonb or {})
+        origins.update({name: "user" for name in changes})
+        arrangement.field_origins_jsonb = origins
+    await db.commit()
+    await db.refresh(arrangement)
+    return await _detail(db, arrangement)
+
+
+@router.delete("/{arrangement_id}", status_code=204)
+async def delete_arrangement(
+    arrangement_id: uuid.UUID, user: CurrentUser, db: DbSession, storage: StorageDep
+) -> Response:
+    """Delete a piece, all its parts and their files. Allowed for whoever
+    added it, or an admin. Rows go first; a failed blob delete only orphans."""
+    arrangement = await _load_arrangement(db, arrangement_id)
+    if arrangement.created_by != user.id and user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="not_arrangement_owner")
+    on_setlist = (
+        await db.execute(
+            select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement_id).limit(1)
+        )
+    ).first()
+    if on_setlist:
+        raise HTTPException(status_code=409, detail="on_a_setlist")
+    keys = [
+        key
+        for storage_key, part_id, thumb in (
+            await db.execute(
+                select(Part.storage_key, Part.id, Part.thumbnail_storage_key).where(
+                    Part.arrangement_id == arrangement_id
+                )
+            )
+        ).all()
+        for key in (storage_key, thumb or thumbnail_key(part_id))
+    ]
+    # A SQL DELETE, not session.delete(): Arrangement.parts is lazy="raise",
+    # and the FKs already cascade parts, tags and enrichment jobs in Postgres.
+    await db.execute(sql_delete(Arrangement).where(Arrangement.id == arrangement_id))
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Raced with a setlist add after the check above.
+        raise HTTPException(status_code=409, detail="on_a_setlist") from None
     await _delete_quietly(storage, *keys)
     return Response(status_code=204)

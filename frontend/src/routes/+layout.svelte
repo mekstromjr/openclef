@@ -49,7 +49,7 @@
 
 <div class="min-h-screen flex flex-col">
   <header
-    class="flex items-center justify-between px-6 py-3 border-b border-clef-graphite-500"
+    class="h-14 flex items-center justify-between px-6 border-b border-clef-graphite-500"
   >
     <a href="/" class="text-lg" aria-label="OpenClef home">
       <OpenClefWordmark />

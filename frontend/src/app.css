@@ -52,3 +52,18 @@
   --font-serif: 'Crimson Pro', 'Iowan Old Style', 'Hoefler Text', Georgia, serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 }
+
+/* Form inputs on dark surfaces (detail page, dialogs). */
+.oc-field {
+  margin-top: 0.25rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  background: var(--color-clef-graphite-700);
+  border: 1px solid var(--color-clef-graphite-500);
+  color: var(--color-clef-stone-100);
+}
+.oc-field:focus {
+  outline: none;
+  border-color: var(--color-clef-claret);
+}

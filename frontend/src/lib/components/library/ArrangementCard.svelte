@@ -4,9 +4,7 @@
 
   let { item, layout = 'grid' }: { item: ArrangementSummary; layout?: 'grid' | 'list' } = $props();
 
-  // Until the score viewer lands (ticket 0140), a card opens the PDF in the
-  // browser's own viewer.
-  const href = $derived(item.cover_part_id ? `/api/v1/parts/${item.cover_part_id}/file` : undefined);
+  const href = $derived(`/arrangements/${item.id}`);
   const thumbnail = $derived(
     item.cover_part_id && item.cover_thumbnail_ready
       ? `/api/v1/parts/${item.cover_part_id}/thumbnail`
@@ -28,8 +26,6 @@
 {#if layout === 'grid'}
   <a
     {href}
-    target="_blank"
-    rel="noopener"
     class="group block rounded-lg border border-clef-graphite-500 bg-clef-graphite-700/40 p-3 hover:border-clef-claret transition-colors"
   >
     {@render cover('aspect-[3/4] w-full')}
@@ -49,8 +45,6 @@
 {:else}
   <a
     {href}
-    target="_blank"
-    rel="noopener"
     class="group flex items-center gap-4 rounded-lg border border-clef-graphite-500 bg-clef-graphite-700/40 p-2 hover:border-clef-claret transition-colors"
   >
     {@render cover('w-12 h-16')}
