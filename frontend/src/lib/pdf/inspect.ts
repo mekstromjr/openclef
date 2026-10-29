@@ -8,6 +8,7 @@
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { KEY_SIGNATURES } from '$lib/api';
+import { loadPdfjs } from './pdfjs';
 
 export type Source = 'pdf-info' | 'page-text';
 
@@ -16,17 +17,6 @@ export interface Suggestions {
   composer?: { value: string; source: Source };
   arranger?: { value: string; source: Source };
   key?: { value: string; source: Source };
-}
-
-let pdfjs: typeof import('pdfjs-dist') | null = null;
-
-async function loadPdfjs() {
-  if (!pdfjs) {
-    pdfjs = await import('pdfjs-dist');
-    const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  }
-  return pdfjs;
 }
 
 export async function openPdf(file: File): Promise<PDFDocumentProxy> {

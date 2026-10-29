@@ -125,6 +125,49 @@ export interface ArrangementList {
   facets: Record<FacetName, FacetCount[]>;
 }
 
+export const PERIODS = [
+  'Medieval', 'Renaissance', 'Baroque', 'Classical', 'Early Romantic',
+  'Romantic', 'Late Romantic', 'Modern', 'Contemporary', 'Various'
+] as const;
+
+export interface Part {
+  id: string;
+  arrangement_id: string;
+  part_type: PartType;
+  label: string;
+  instrument: string | null;
+  page_count: number;
+  file_size_bytes: number;
+  thumbnail_storage_key: string | null;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface ArrangementDetail {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  composer: string[];
+  arranger: string[];
+  instrumentation: string[];
+  key_signature: string | null;
+  period: string | null;
+  difficulty: number | null;
+  notes: string | null;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+  parts: Part[];
+  tags: string[];
+}
+
+export type ArrangementPatch = Partial<
+  Pick<
+    ArrangementDetail,
+    'title' | 'subtitle' | 'composer' | 'arranger' | 'instrumentation' | 'key_signature' | 'period' | 'difficulty' | 'notes'
+  >
+>;
+
 export interface UploadMetadata {
   title?: string;
   composer?: string[];
@@ -135,9 +178,33 @@ export interface UploadMetadata {
 }
 
 /**
- * Upload one PDF as a new arrangement. Uses XMLHttpRequest rather than
- * fetch because fetch can't report upload progress.
+ * POST a multipart form with upload progress. XMLHttpRequest rather than
+ * fetch, because fetch can't report upload progress.
  */
+function postMultipart<T>(url: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON error body */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload as T);
+      else reject(new ApiError(xhr.status, (payload as { detail?: unknown })?.detail ?? xhr.statusText));
+    };
+    xhr.onerror = () => reject(new ApiError(0, 'network_error'));
+    xhr.send(form);
+  });
+}
+
+/** Upload one PDF as a new arrangement. */
 export function uploadArrangement(
   file: File,
   options: { metadata?: UploadMetadata; partType?: PartType; onProgress?: (fraction: number) => void }
@@ -148,30 +215,21 @@ export function uploadArrangement(
     form.append('metadata', JSON.stringify(options.metadata));
   }
   if (options.partType) form.append('part_type', options.partType);
+  return postMultipart('/api/v1/arrangements/upload', form, options.onProgress);
+}
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/v1/arrangements/upload');
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);
-    };
-    xhr.onload = () => {
-      let payload: unknown = null;
-      try {
-        payload = JSON.parse(xhr.responseText);
-      } catch {
-        /* non-JSON error body */
-      }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(payload as { arrangement: { id: string; title: string } });
-      } else {
-        reject(new ApiError(xhr.status, (payload as { detail?: unknown })?.detail ?? xhr.statusText));
-      }
-    };
-    xhr.onerror = () => reject(new ApiError(0, 'network_error'));
-    xhr.send(form);
-  });
+/** Add another part (e.g. the cello part) to an arrangement. */
+export function uploadPart(
+  arrangementId: string,
+  file: File,
+  options: { partType?: PartType; label?: string; instrument?: string; onProgress?: (fraction: number) => void }
+): Promise<Part> {
+  const form = new FormData();
+  form.append('file', file);
+  if (options.partType) form.append('part_type', options.partType);
+  if (options.label?.trim()) form.append('label', options.label.trim());
+  if (options.instrument?.trim()) form.append('instrument', options.instrument.trim());
+  return postMultipart(`/api/v1/arrangements/${arrangementId}/parts`, form, options.onProgress);
 }
 
 /** Human-readable message for an upload failure. */

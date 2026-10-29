@@ -221,6 +221,13 @@ class UploadResponse(BaseModel):
     enrichment_job_id: uuid.UUID | None = None
 
 
+class ArrangementDetail(ArrangementRead):
+    """One arrangement with its parts (upload order) and tag names."""
+
+    parts: list[PartRead]
+    tags: list[str]
+
+
 class ArrangementSummary(BaseModel):
     """One library card: the searchable fields plus what the card shows."""
 
