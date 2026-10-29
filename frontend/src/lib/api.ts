@@ -70,13 +70,23 @@ export interface SetupStatus {
 
 // --- Library ---
 
-export const KEY_SIGNATURES = [
-  'C major', 'G major', 'D major', 'A major', 'E major', 'B major', 'F# major',
-  'Db major', 'Ab major', 'Eb major', 'Bb major', 'F major',
-  'A minor', 'E minor', 'B minor', 'F# minor', 'C# minor', 'G# minor',
-  'Eb minor', 'Bb minor', 'F minor', 'C minor', 'G minor', 'D minor',
-  'Atonal', 'Modal', 'None', 'Multiple'
+// All 30 key signatures, circle-of-fifths order (matches the backend enum).
+// Enharmonic keys are distinct on purpose: the spelling is what's printed.
+export const MAJOR_KEYS = [
+  'C major', 'G major', 'D major', 'A major', 'E major', 'B major', 'F# major', 'C# major',
+  'Cb major', 'Gb major', 'Db major', 'Ab major', 'Eb major', 'Bb major', 'F major'
 ] as const;
+export const MINOR_KEYS = [
+  'A minor', 'E minor', 'B minor', 'F# minor', 'C# minor', 'G# minor', 'D# minor', 'A# minor',
+  'Ab minor', 'Eb minor', 'Bb minor', 'F minor', 'C minor', 'G minor', 'D minor'
+] as const;
+export const OTHER_KEYS = ['Atonal', 'Modal', 'None', 'Multiple'] as const;
+export const KEY_SIGNATURES = [...MAJOR_KEYS, ...MINOR_KEYS, ...OTHER_KEYS];
+
+/** "Gb major" -> "G♭ major" for display; stored values keep ASCII. */
+export function formatKey(key: string): string {
+  return key.replace(/^([A-G])b/, '$1♭').replace(/^([A-G])#/, '$1♯');
+}
 
 export const PART_TYPES = [
   'Full Score', 'Conductor Score', 'Piano Reduction', 'Vocal Score', 'Other'

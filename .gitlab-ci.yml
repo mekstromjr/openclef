@@ -132,6 +132,32 @@ test:backend:
       when: always
     - when: never
 
+# Type-check the SvelteKit app and run its unit tests (Vitest).
+test:frontend:
+  stage: test
+  image: node:22.22.2-alpine
+  tags:
+    - meklab-k3s
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - frontend/node_modules/
+  script:
+    - cd frontend
+    - npm ci
+    - npm run check
+    - npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+      when: always
+    - when: never
+
 build:image:
   stage: build
   image:

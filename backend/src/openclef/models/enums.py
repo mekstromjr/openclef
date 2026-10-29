@@ -29,12 +29,12 @@ class Theme(str, Enum):
 
 
 class KeySignature(str, Enum):
-    """24 tonal keys (12 majors + 12 minors) plus 4 catch-all values.
+    """All 30 key signatures (15 majors + 15 minors) plus 4 catch-all values.
 
-    Enharmonic spellings collapse to a canonical form per circle-of-fifths
-    convention: sharp-side keys use sharps, flat-side keys use flats.
-    Users entering an unusual enharmonic spelling at upload pick the
-    closest canonical key; the original spelling lives in `notes`.
+    Enharmonic keys are distinct (G-flat major is not F-sharp major):
+    sheet music is about notation, and the spelling is what's on the page.
+    Declaration order follows the circle of fifths, matching the DB enum
+    (migration 0003 inserts the later additions in place).
     """
 
     # Majors
@@ -45,6 +45,9 @@ class KeySignature(str, Enum):
     E_MAJOR = "E major"
     B_MAJOR = "B major"
     F_SHARP_MAJOR = "F# major"
+    C_SHARP_MAJOR = "C# major"
+    C_FLAT_MAJOR = "Cb major"
+    G_FLAT_MAJOR = "Gb major"
     D_FLAT_MAJOR = "Db major"
     A_FLAT_MAJOR = "Ab major"
     E_FLAT_MAJOR = "Eb major"
@@ -58,6 +61,9 @@ class KeySignature(str, Enum):
     F_SHARP_MINOR = "F# minor"
     C_SHARP_MINOR = "C# minor"
     G_SHARP_MINOR = "G# minor"
+    D_SHARP_MINOR = "D# minor"
+    A_SHARP_MINOR = "A# minor"
+    A_FLAT_MINOR = "Ab minor"
     E_FLAT_MINOR = "Eb minor"
     B_FLAT_MINOR = "Bb minor"
     F_MINOR = "F minor"
