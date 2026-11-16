@@ -54,6 +54,38 @@ export interface User {
   role: UserRole;
   created_at: string;
   updated_at: string;
+  sso_linked: boolean;
+  has_password: boolean;
+}
+
+export interface OidcConfig {
+  enabled: boolean;
+  provider_name: string;
+}
+
+/** Plain-language text for the `sso_error` codes the OIDC callback returns. */
+export function ssoErrorMessage(code: string): string {
+  switch (code) {
+    case 'access_denied':
+      return 'Sign-in was cancelled, or your account is not allowed to use OpenClef.';
+    case 'session_expired':
+      return 'The sign-in took too long. Please try again.';
+    case 'link_requires_login':
+      return 'Sign in with your OpenClef password first, then link single sign-on from Settings.';
+    case 'sso_already_linked':
+      return 'That single sign-on account is already linked to another OpenClef user.';
+    case 'provider_unreachable':
+      return 'The sign-in service could not be reached. Try again, or use your password.';
+    default:
+      return 'Single sign-on failed. Try again, or use your password.';
+  }
+}
+
+/** Full-page navigation to start the SSO redirect dance. */
+export function startSso(next = '/', link = false) {
+  const query = new URLSearchParams({ next });
+  if (link) query.set('link', '1');
+  window.location.assign(`/api/v1/auth/oidc/login?${query}`);
 }
 
 export interface UserSettings {

@@ -1,6 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ApiError, api, type UserSettings } from '$lib/api';
+  import { ApiError, api, startSso, type OidcConfig, type UserSettings } from '$lib/api';
+  import { authState, bootstrap } from '$lib/stores/auth.svelte';
+
+  let sso = $state<OidcConfig | null>(null);
+  let ssoError = $state<string | null>(null);
+
+  async function unlinkSso() {
+    if (!confirm('Unlink single sign-on? You will sign in with your password only.')) return;
+    ssoError = null;
+    try {
+      await api.delete('/api/v1/auth/oidc/link');
+      await bootstrap();
+    } catch (e) {
+      ssoError = e instanceof ApiError && e.status === 409
+        ? 'This account has no password, so single sign-on is its only way in.'
+        : 'Unlinking failed.';
+    }
+  }
 
   let settings = $state<UserSettings | null>(null);
   let saving = $state(false);
@@ -8,6 +25,7 @@
   let error = $state<string | null>(null);
 
   onMount(async () => {
+    api.get<OidcConfig>('/api/v1/auth/oidc/config').then((c) => (sso = c), () => (sso = null));
     try {
       settings = await api.get<UserSettings>('/api/v1/users/me/settings');
     } catch (e) {
@@ -98,5 +116,29 @@
     {/if}
   {:else if !error}
     <div class="text-sm text-clef-stone-300/70">Loading…</div>
+  {/if}
+
+  {#if sso?.enabled && authState.user}
+    <section class="space-y-3 border-t border-clef-graphite-500 pt-6">
+      <h2 class="text-sm font-medium text-clef-ivory">Single sign-on</h2>
+      {#if authState.user.sso_linked}
+        <p class="text-sm text-clef-stone-300">
+          Linked to {sso.provider_name}. You can sign in with it instead of your password.
+        </p>
+        {#if authState.user.has_password}
+          <button type="button" onclick={unlinkSso} class="px-3 py-1.5 rounded border border-clef-graphite-500 text-sm hover:border-clef-claret">
+            Unlink
+          </button>
+        {/if}
+      {:else}
+        <p class="text-sm text-clef-stone-300">
+          Link your {sso.provider_name} account to sign in without a separate OpenClef password.
+        </p>
+        <button type="button" onclick={() => startSso('/settings', true)} class="px-3 py-1.5 rounded border border-clef-graphite-500 text-sm hover:border-clef-claret">
+          Link {sso.provider_name}
+        </button>
+      {/if}
+      {#if ssoError}<p class="text-sm text-clef-claret">{ssoError}</p>{/if}
+    </section>
   {/if}
 </div>

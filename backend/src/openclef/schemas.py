@@ -44,6 +44,9 @@ class UserRead(BaseModel):
     role: UserRole
     created_at: datetime
     updated_at: datetime
+    # The SSO subject itself stays server-side; the UI only needs to know.
+    sso_linked: bool = False
+    has_password: bool = True
 
 
 class UserCreate(BaseModel):

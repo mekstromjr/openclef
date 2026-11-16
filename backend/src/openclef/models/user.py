@@ -49,6 +49,14 @@ class User(Base):
         Index("ix_users_oidc_sub", "oidc_sub", unique=True, postgresql_where="oidc_sub IS NOT NULL"),
     )
 
+    @property
+    def sso_linked(self) -> bool:
+        return self.oidc_sub is not None
+
+    @property
+    def has_password(self) -> bool:
+        return self.password_hash is not None
+
 
 class UserSettings(Base):
     __tablename__ = "user_settings"

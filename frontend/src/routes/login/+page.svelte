@@ -1,7 +1,22 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { ApiError } from '$lib/api';
+  import { page } from '$app/state';
+  import { ApiError, api, ssoErrorMessage, startSso, type OidcConfig } from '$lib/api';
   import { login } from '$lib/stores/auth.svelte';
+
+  let sso = $state<OidcConfig | null>(null);
+  const next = $derived(page.url.searchParams.get('next') || '/');
+
+  onMount(async () => {
+    const code = page.url.searchParams.get('sso_error');
+    if (code) error = ssoErrorMessage(code);
+    try {
+      sso = await api.get<OidcConfig>('/api/v1/auth/oidc/config');
+    } catch {
+      sso = null; // SSO is optional; the password form still works.
+    }
+  });
 
   let username = $state('');
   let password = $state('');
@@ -14,7 +29,7 @@
     submitting = true;
     try {
       await login(username, password);
-      await goto('/');
+      await goto(next.startsWith('/') && !next.startsWith('//') ? next : '/');
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.status === 429) {
@@ -80,5 +95,18 @@
     >
       {submitting ? 'Signing in…' : 'Sign in'}
     </button>
+
+    {#if sso?.enabled}
+      <div class="flex items-center gap-3 text-xs text-clef-stone-300/60">
+        <span class="h-px flex-1 bg-clef-graphite-500"></span>or<span class="h-px flex-1 bg-clef-graphite-500"></span>
+      </div>
+      <button
+        type="button"
+        onclick={() => startSso(next)}
+        class="w-full py-2 rounded border border-clef-graphite-500 text-clef-ivory font-medium hover:border-clef-claret"
+      >
+        Sign in with {sso.provider_name}
+      </button>
+    {/if}
   </form>
 </div>

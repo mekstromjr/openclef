@@ -14,6 +14,7 @@ from openclef.config import get_settings
 from openclef.db import engine
 from openclef.routers import arrangements as arrangements_router
 from openclef.routers import auth as auth_router
+from openclef.routers import oidc as oidc_router
 from openclef.routers import parts as parts_router
 from openclef.routers import setup as setup_router
 from openclef.routers import users as users_router
@@ -95,6 +96,7 @@ class UploadSizeLimit:
 app.add_middleware(UploadSizeLimit, max_bytes=settings.max_upload_mb * 1024 * 1024)
 
 app.include_router(auth_router.router)
+app.include_router(oidc_router.router)
 app.include_router(setup_router.router)
 app.include_router(users_router.router)
 app.include_router(arrangements_router.router)

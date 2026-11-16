@@ -39,6 +39,10 @@ dependencies = [
     "pillow==12.3.0",
     # Multipart form parsing for PDF uploads (FastAPI File/Form).
     "python-multipart==0.0.32",
+    # OIDC sign-in: talking to the provider (discovery, JWKS, token
+    # endpoint) and verifying its signed ID tokens.
+    "httpx==0.28.1",
+    "joserfc==1.7.7",
 ]
 
 [project.optional-dependencies]
