@@ -74,6 +74,32 @@ class Settings(BaseSettings):
     admin_user: str | None = None
     admin_password: str | None = None
 
+    # --- Optional OIDC sign-in (any standards-compliant provider) ---
+    # All three of issuer, client id and client secret enable it; without
+    # them the SSO routes 404 and only native accounts exist.
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    # Exact callback URL registered with the provider, e.g.
+    # https://openclef.example.com/api/v1/auth/oidc/callback. Explicit
+    # rather than derived, because behind a proxy the app can't be sure
+    # of its own public scheme and host.
+    oidc_redirect_uri: str | None = None
+    # Button label on the login page ("Sign in with <name>").
+    oidc_provider_name: str = "SSO"
+    # Members of this group (from the `groups` claim) become admins.
+    oidc_admin_group: str | None = None
+    oidc_scopes: str = "openid profile email"
+
+    @property
+    def oidc_enabled(self) -> bool:
+        return bool(
+            self.oidc_issuer
+            and self.oidc_client_id
+            and self.oidc_client_secret
+            and self.oidc_redirect_uri
+        )
+
 
 def get_settings() -> Settings:
     return Settings()
