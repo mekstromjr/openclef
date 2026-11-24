@@ -37,6 +37,11 @@ ENV OPENCLEF_STATIC_DIR=/app/static \
     OPENCLEF_DATA_DIR=/app/data \
     PYTHONUNBUFFERED=1
 
+# Reported by /api/v1/version. Declared last so a new value only rebuilds
+# this layer. CI passes the tag, or the short SHA for untagged builds.
+ARG OPENCLEF_VERSION=dev
+ENV OPENCLEF_VERSION=${OPENCLEF_VERSION}
+
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
   CMD curl -fsS http://localhost:8000/health || exit 1
