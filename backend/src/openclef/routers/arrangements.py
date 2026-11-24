@@ -26,7 +26,7 @@ from openclef.db import get_session
 from openclef.models.enrichment import EnrichmentJob
 from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period, UserRole
 from openclef.models.library import Arrangement, ArrangementTag, Part, Tag
-from openclef.models.setlist import SetlistItem
+from openclef.models.setlist import Setlist, SetlistItem
 from openclef.models.user import User, UserSettings
 from openclef.routers._deps import get_storage
 from openclef.schemas import (
@@ -38,6 +38,7 @@ from openclef.schemas import (
     FacetCount,
     ArrangementUploadMetadata,
     PartRead,
+    SetlistRef,
     UploadResponse,
 )
 from openclef.services.library_search import LibraryFilters, facet_queries, order_by
@@ -371,10 +372,18 @@ async def _detail(db: AsyncSession, arrangement: Arrangement) -> ArrangementDeta
             .order_by(Tag.name)
         )
     ).scalars().all()
+    setlists = (
+        await db.execute(
+            select(Setlist.id, Setlist.name)
+            .where(Setlist.id.in_(select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement.id)))
+            .order_by(Setlist.name, Setlist.id)
+        )
+    ).all()
     return ArrangementDetail(
         **ArrangementRead.model_validate(arrangement).model_dump(),
         parts=[PartRead.model_validate(part) for part in parts],
         tags=list(tags),
+        setlists=[SetlistRef(id=setlist_id, name=name) for setlist_id, name in setlists],
     )
 
 

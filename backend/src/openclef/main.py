@@ -16,6 +16,7 @@ from openclef.routers import arrangements as arrangements_router
 from openclef.routers import auth as auth_router
 from openclef.routers import oidc as oidc_router
 from openclef.routers import parts as parts_router
+from openclef.routers import setlists as setlists_router
 from openclef.routers import setup as setup_router
 from openclef.routers import users as users_router
 from openclef.storage import build_storage
@@ -101,6 +102,7 @@ app.include_router(setup_router.router)
 app.include_router(users_router.router)
 app.include_router(arrangements_router.router)
 app.include_router(parts_router.router)
+app.include_router(setlists_router.router)
 
 
 async def _check_db() -> bool:
