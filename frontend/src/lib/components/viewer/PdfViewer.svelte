@@ -10,12 +10,41 @@
    * Each page renders once into an off-screen canvas; turning copies it to
    * the visible canvas. After every turn the neighbouring pages render
    * ahead, so turns feel instant.
+   *
+   * Inside a setlist the player passes `onEnd` / `onStart`: turning past
+   * the last page (or before the first) moves to the next (or previous)
+   * piece instead of stopping. The component stays mounted across pieces,
+   * so fullscreen survives; only `url` changes.
    */
   import type { PDFDocumentProxy } from 'pdfjs-dist';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack, type Snippet } from 'svelte';
   import { loadPdfjs } from '$lib/pdf/pdfjs';
 
-  let { url, downloadUrl }: { url: string; downloadUrl: string } = $props();
+  let {
+    url,
+    downloadUrl,
+    onEnd,
+    onStart,
+    endLabel,
+    startAt = 'first',
+    preloaded = null,
+    menu
+  }: {
+    url: string;
+    downloadUrl: string;
+    /** Called when turning forward on the last page. */
+    onEnd?: () => void;
+    /** Called when turning back on the first page. */
+    onStart?: () => void;
+    /** Shown on the last page, e.g. "Next: Ave Maria". */
+    endLabel?: string;
+    /** Page to open on: the first, or the last (when coming back a piece). */
+    startAt?: 'first' | 'last';
+    /** The PDF's bytes, already fetched; falls back to `url` if it fails. */
+    preloaded?: Promise<ArrayBuffer> | null;
+    /** Extra controls for the top menu. */
+    menu?: Snippet<[{ close: () => void }]>;
+  } = $props();
 
   let container: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -46,15 +75,19 @@
     status = 'loading';
     cache.clear();
     page = 1;
+    // Read once per document, without making them dependencies of the effect.
+    const [bytes, openAt] = untrack(() => [preloaded, startAt] as const);
     try {
       const lib = await loadPdfjs();
-      const loaded = await lib.getDocument({ url: source, withCredentials: true }).promise;
+      // pdf.js hands the buffer to its worker, so each preload opens once.
+      const data = bytes ? await bytes.then((b) => new Uint8Array(b), () => null) : null;
+      const loaded = await lib.getDocument(data ? { data } : { url: source, withCredentials: true }).promise;
       if (token !== loadToken) return void loaded.loadingTask.destroy();
       void doc?.loadingTask.destroy();
       doc = loaded;
       pageCount = loaded.numPages;
       status = 'ready';
-      await show(1);
+      await show(openAt === 'last' ? loaded.numPages : 1);
     } catch {
       if (token === loadToken) status = 'failed';
     }
@@ -114,8 +147,15 @@
     if (target > 1) void renderPage(target - 1).catch(() => {});
   }
 
-  const next = () => page < pageCount && show(page + 1);
-  const previous = () => page > 1 && show(page - 1);
+  function next() {
+    if (page < pageCount) return show(page + 1);
+    onEnd?.();
+  }
+
+  function previous() {
+    if (page > 1) return show(page - 1);
+    onStart?.();
+  }
 
   // --- Input --------------------------------------------------------------
 
@@ -221,6 +261,11 @@
     <div class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs tabular-nums text-clef-stone-100">
       {page} / {pageCount}
     </div>
+    {#if endLabel && page === pageCount}
+      <div class="pointer-events-none absolute bottom-3 right-3 max-w-[45%] truncate rounded-full bg-clef-claret/90 px-3 py-1 text-xs text-clef-ivory">
+        {endLabel} →
+      </div>
+    {/if}
   {/if}
 
   {#if menuOpen}
@@ -236,6 +281,7 @@
         />
         <span class="text-clef-stone-300/70">of {pageCount}</span>
       </form>
+      {#if menu}{@render menu({ close: () => (menuOpen = false) })}{/if}
       <button type="button" onclick={toggleFullscreen} class="rounded px-2 py-1 hover:bg-clef-graphite-700">Fullscreen</button>
       <a href={downloadUrl} class="rounded px-2 py-1 hover:bg-clef-graphite-700">Download</a>
       <button type="button" onclick={() => (menuOpen = false)} class="rounded px-2 py-1 text-clef-stone-300 hover:bg-clef-graphite-700" aria-label="Close menu">✕</button>

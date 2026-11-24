@@ -14,6 +14,14 @@
   // signing in (ticket 0153).
   const PUBLIC_PREFIXES = ['/login', '/setup', '/docs'];
 
+  const section = $derived(
+    page.url.pathname.startsWith('/setlists')
+      ? 'setlists'
+      : page.url.pathname === '/' || page.url.pathname.startsWith('/arrangements')
+        ? 'library'
+        : null
+  );
+
   function isPublic(path: string): boolean {
     return PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + '/'));
   }
@@ -51,9 +59,17 @@
   <header
     class="h-14 flex items-center justify-between px-6 border-b border-clef-graphite-500"
   >
-    <a href="/" class="text-lg" aria-label="OpenClef home">
-      <OpenClefWordmark />
-    </a>
+    <div class="flex items-center gap-5">
+      <a href="/" class="text-lg" aria-label="OpenClef home">
+        <OpenClefWordmark />
+      </a>
+      {#if authState.user}
+        <nav aria-label="Main" class="flex items-center gap-4 text-sm">
+          <a href="/" class={section === 'library' ? 'text-clef-ivory' : 'text-clef-stone-300 hover:text-clef-ivory'} aria-current={section === 'library' ? 'page' : undefined}>Library</a>
+          <a href="/setlists" class={section === 'setlists' ? 'text-clef-ivory' : 'text-clef-stone-300 hover:text-clef-ivory'} aria-current={section === 'setlists' ? 'page' : undefined}>Setlists</a>
+        </nav>
+      {/if}
+    </div>
     <AccountDropdown />
   </header>
 

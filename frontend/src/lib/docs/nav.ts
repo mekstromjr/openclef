@@ -25,7 +25,10 @@ export const docsNav: DocNavSection[] = [
   },
   {
     label: 'Guides',
-    links: [{ label: 'Overview', href: '/docs/guides' }]
+    links: [
+      { label: 'Overview', href: '/docs/guides' },
+      { label: 'Setlists', href: '/docs/guides/setlists' }
+    ]
   },
   {
     label: 'Reference',
