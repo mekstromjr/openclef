@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -229,6 +229,8 @@ class ArrangementDetail(ArrangementRead):
 
     parts: list[PartRead]
     tags: list[str]
+    # Setlists this piece is on (a piece on a setlist can't be deleted).
+    setlists: list["SetlistRef"] = []
 
 
 class ArrangementSummary(BaseModel):
@@ -326,31 +328,12 @@ class AnnotationRevisionCreate(BaseModel):
 # --- Setlist ----------------------------------------------------------
 
 
-class SetlistItemRead(BaseModel):
-    model_config = _READ_CONFIG
+# Request bodies arrive as JSON, where ids and timestamps are strings.
+# Strict mode would refuse that conversion, so these fields opt out of it.
+_JsonUuid = Annotated[uuid.UUID, Field(strict=False)]
+_JsonDatetime = Annotated[datetime, Field(strict=False)]
 
-    setlist_id: uuid.UUID
-    position: int
-    arrangement_id: uuid.UUID
-    part_id: uuid.UUID | None
-
-
-class SetlistItemCreate(BaseModel):
-    model_config = _WRITE_CONFIG
-
-    arrangement_id: uuid.UUID
-    part_id: uuid.UUID | None = None
-    position: int = Field(ge=0)
-
-
-class SetlistRead(BaseModel):
-    model_config = _READ_CONFIG
-
-    id: uuid.UUID
-    name: str
-    owner_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+SETLIST_MAX_ITEMS = 200
 
 
 class SetlistCreate(BaseModel):
@@ -362,7 +345,63 @@ class SetlistCreate(BaseModel):
 class SetlistUpdate(BaseModel):
     model_config = _WRITE_CONFIG
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    # Optimistic concurrency: the `updated_at` the client loaded. A stale
+    # value gets 409 instead of overwriting someone else's edit.
+    expected_updated_at: _JsonDatetime | None = None
+
+
+class SetlistItemWrite(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    arrangement_id: _JsonUuid
+    # None opens the arrangement's cover (first-uploaded) part.
+    part_id: _JsonUuid | None = None
+
+
+class SetlistItemsReplace(BaseModel):
+    """The whole running order, first to last. Saving replaces it."""
+
+    model_config = _WRITE_CONFIG
+
+    items: list[SetlistItemWrite] = Field(max_length=SETLIST_MAX_ITEMS)
+    expected_updated_at: _JsonDatetime | None = None
+
+
+class SetlistEntry(BaseModel):
+    """One position in a setlist, with what the editor and player show."""
+
+    position: int
+    arrangement_id: uuid.UUID
+    title: str
+    subtitle: str | None
+    composer: list[str]
+    # What was chosen (None = cover), and the part that will actually open.
+    part_id: uuid.UUID | None
+    effective_part_id: uuid.UUID | None
+    part_label: str | None
+    page_count: int | None
+    thumbnail_ready: bool
+
+
+class SetlistSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    owner_id: uuid.UUID
+    owner_username: str
+    item_count: int
+    created_at: datetime
+    updated_at: datetime
+    can_edit: bool
+
+
+class SetlistDetail(SetlistSummary):
+    items: list[SetlistEntry]
+
+
+class SetlistRef(BaseModel):
+    id: uuid.UUID
+    name: str
 
 
 # --- EnrichmentJob ----------------------------------------------------
@@ -380,3 +419,7 @@ class EnrichmentJobRead(BaseModel):
     attempts: int
     created_at: datetime
     completed_at: datetime | None
+
+
+# ArrangementDetail refers to SetlistRef, defined later in this module.
+ArrangementDetail.model_rebuild()
