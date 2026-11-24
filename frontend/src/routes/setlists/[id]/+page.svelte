@@ -26,6 +26,9 @@
   let newName = $state('');
   let addOpen = $state(false);
   let dragFrom = $state<number | null>(null);
+  // Rows become draggable only while the grip is held, so the part picker
+  // and links inside a row keep working normally.
+  let dragArmed = $state<number | null>(null);
   // Parts of each piece, for the "which part opens" picker (editors only).
   let partsByArrangement = $state<Record<string, Part[]>>({});
 
@@ -215,15 +218,31 @@
         {#each entries as entry, index (`${index}:${entry.arrangement_id}`)}
           {@const parts = partsByArrangement[entry.arrangement_id] ?? []}
           <li
-            draggable={setlist.can_edit}
-            ondragstart={() => (dragFrom = index)}
-            ondragover={(event) => setlist?.can_edit && event.preventDefault()}
-            ondrop={() => onDrop(index)}
-            ondragend={() => (dragFrom = null)}
+            draggable={setlist.can_edit && dragArmed === index}
+            ondragstart={(event) => {
+              dragFrom = index;
+              // Firefox starts a drag only when some data is set.
+              event.dataTransfer?.setData('text/plain', String(index));
+              if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+            }}
+            ondragover={(event) => dragFrom !== null && event.preventDefault()}
+            ondrop={(event) => {
+              event.preventDefault();
+              onDrop(index);
+            }}
+            ondragend={() => (dragFrom = dragArmed = null)}
             class="flex items-center gap-3 rounded-lg border px-3 py-2 {dragFrom === index
               ? 'border-clef-claret opacity-60'
               : 'border-clef-graphite-500'}"
           >
+            {#if setlist.can_edit}
+              <span
+                onpointerdown={() => (dragArmed = index)}
+                onpointerup={() => (dragArmed = null)}
+                class="hidden sm:block shrink-0 cursor-grab select-none px-1 text-clef-stone-300/50 hover:text-clef-ivory"
+                aria-hidden="true"
+                title="Drag to reorder">⠿</span>
+            {/if}
             <span class="w-6 shrink-0 text-right text-sm tabular-nums text-clef-stone-300/70">{index + 1}</span>
             <div class="h-14 w-10 shrink-0 overflow-hidden rounded bg-clef-graphite-700">
               {#if entry.effective_part_id && entry.thumbnail_ready}

@@ -85,6 +85,9 @@
       if (token !== loadToken) return void loaded.loadingTask.destroy();
       void doc?.loadingTask.destroy();
       doc = loaded;
+      // Clear again: a render for the previous document may have finished
+      // since open() started (renderPage won't cache it, but be certain).
+      cache.clear();
       pageCount = loaded.numPages;
       status = 'ready';
       await show(openAt === 'last' ? loaded.numPages : 1);
@@ -106,7 +109,11 @@
     // Serialise renders: one at a time keeps memory flat on tablets.
     const job = renderQueue.then(async () => {
       if (!doc) throw new Error('no document');
-      const pdfPage = await doc.getPage(number);
+      // The viewer outlives a document (a setlist swaps `url`), so a render
+      // can finish after the next piece has opened. Remember which document
+      // this page belongs to, and never cache it under another one.
+      const source = doc;
+      const pdfPage = await source.getPage(number);
       const base = pdfPage.getViewport({ scale: 1 });
       const { scale } = targetSize(base.width, base.height);
       const viewport = pdfPage.getViewport({ scale });
@@ -114,6 +121,7 @@
       offscreen.width = Math.floor(viewport.width);
       offscreen.height = Math.floor(viewport.height);
       await pdfPage.render({ canvas: offscreen, viewport }).promise;
+      if (doc !== source) return offscreen;
       cache.set(number, offscreen);
       // Keep only pages near the current one.
       for (const key of cache.keys()) if (Math.abs(key - page) > 3) cache.delete(key);
@@ -125,6 +133,7 @@
 
   async function show(number: number) {
     if (!doc) return;
+    const shown = doc;
     const target = Math.min(Math.max(1, number), pageCount);
     page = target;
     const key = `${container.clientWidth}x${container.clientHeight}`;
@@ -133,8 +142,10 @@
       cacheKey = key;
     }
     const rendered = await renderPage(target);
-    if (page !== target) return; // the user turned again meanwhile
-    const pdfPage = await doc.getPage(target);
+    // The user turned again, or a different piece opened, meanwhile.
+    if (page !== target || doc !== shown) return;
+    const pdfPage = await shown.getPage(target);
+    if (page !== target || doc !== shown) return;
     const base = pdfPage.getViewport({ scale: 1 });
     const { cssWidth, cssHeight } = targetSize(base.width, base.height);
     canvas.width = rendered.width;
