@@ -17,7 +17,7 @@ A scheduled "run `npm outdated` every N weeks" ticket was the alternative. It's 
 
 ## Why Not Full Auto-Merge
 
-There is **no docs CI build yet** (Phase 5 of [ticket 0146](../../meklab/vault/Tickets/Active/0146-openclef-docs-subsite.md)). Without a build step verifying the site still renders, "Renovate says green" only means `npm install` succeeded — which catches peer-dep breaks but not Astro/Starlight regressions.
+CI now builds the docs site (`docs:build` in `.gitlab-ci.yml`) when `docs/` changes. Without a build step verifying the site still renders, "Renovate says green" only means `npm install` succeeded — which catches peer-dep breaks but not Astro/Starlight regressions.
 
 Until docs CI lands, **all merges are manual**. Once CI exists, the fontsource + sharp group is a candidate for `automerge: true` on minor/patch.
 
