@@ -1,41 +1,57 @@
 # OpenClef
 
-OpenClef is a self-hosted, web-based library for sheet music PDFs: upload scores, find them with full-text search and facets, and read them in the browser.
+A self-hosted sheet music library for families and small ensembles. Upload your PDFs once, find
+them by title, composer, instrument or key, and read them in the browser with tap-to-turn pages.
 
-![OpenClef library view: a search bar, facet filters for composer, key and difficulty, and a grid card showing a first-page thumbnail, title, composer and difficulty stars](docs/screenshots/openclef-library.webp)
+![The OpenClef library: a grid of score covers with filters for instrument, composer, key and period](assets/readme/library.png)
 
-**Status:** early and in active development. Accounts (password and optional OIDC), PDF upload, search, the library grid and the page viewer work end to end. Setlists and annotations have database tables but no API or UI yet; a performance mode is planned.
+OpenClef is the shared shelf that feeds whatever you perform from. Everyone in the household sees
+the same library, and nobody has to email PDFs around before a rehearsal.
 
-Developed on a self-hosted GitLab; this GitHub repo is a read-only mirror. Issues and pull requests are not accepted here.
+**Status:** early and in active development. Accounts (password and optional OIDC), PDF upload,
+search, the library and the page viewer work end to end. Setlists and annotations have database
+tables but no API or UI yet.
 
-## What it does
+Developed on a self-hosted GitLab; this GitHub repository is a read-only mirror. Issues and pull
+requests are not accepted here.
 
-- **Library and search.** Arrangements are listed in a grid or list with first-page thumbnails. Search is Postgres full-text search over a generated `tsvector` column (title, subtitle, alternative titles, composer, arranger, instrumentation) with a GIN index. Each query word becomes a prefix match, so results narrow as you type, and only word characters reach `to_tsquery`, so input cannot inject query operators. Facets (instrument, composer, key, period, difficulty, tag) return counts computed with every other active filter applied.
-- **Upload.** A PDF is validated by magic bytes, size cap and a pypdf parse while being streamed from the spooled multipart file to storage, with a SHA-256 computed on the way; nothing holds the whole file in memory. In the browser, pdf.js reads the PDF's Info dictionary and first-page text to suggest title and composer before upload. Arrangements can have multiple parts (one PDF each).
-- **Thumbnails.** A Dramatiq worker renders the first page with PDFium (pypdfium2) after the upload commits. A failed enqueue only means no thumbnail yet.
-- **Viewer.** A pdf.js viewer built for reading at the stand: one page at a time fitted to the screen, tap or swipe zones instead of a toolbar, keyboard page turns, and neighbouring pages pre-rendered off-screen so turns are instant.
-- **Storage.** A small storage protocol with two backends: local filesystem (async IO via aiofiles) and S3-compatible (aioboto3), with an on-disk LRU cache for thumbnails on S3.
-- **Auth.**
-  - Argon2id password hashing with a per-install pepper.
-  - Signed session cookies that carry identity; Redis stores only a revocation set, so a normal request needs no Redis lookup.
-  - Per-username login rate limit as a token bucket in a single Redis Lua script, so check-and-decrement is atomic.
-  - Optional OIDC sign-in (any provider): authorization code flow with PKCE, `state` and `nonce` kept in one short-lived signed cookie, ID token verified against the provider's JWKS, users matched on `sub` only. An admin group claim can grant the admin role.
-- **First-run setup and admin.** A `/setup` flow creates the first admin; admins manage users. User docs are served inside the app at `/docs`.
+## Features
 
-## Stack
+**Library**
+- Search as you type over titles, composers, arrangers and instruments: "moon" already finds
+  "Moonlight Sonata".
+- Filters for instrument, composer, key, period, difficulty and tag, with live counts. A filter
+  keeps showing its alternatives, so switching from Piano to Cello is one click.
+- Grid or list view. Every filtered view lives in the URL, so it can be bookmarked or shared.
 
-| Layer | Choice |
+**Scores and parts**
+- A piece can hold several parts: the full score, the cello part, a piano reduction.
+- All 30 key signatures, spelled the way they're printed (G-flat major is not F-sharp major).
+
+**Upload**
+- Drag in one PDF or a whole stack, with per-file progress.
+- A live preview of page 1 next to the form, which pre-fills title, composer and key from the
+  PDF's metadata and its first page (English and German key names: "in G-flat major", "Ges-Dur").
+- Thumbnails render in a background worker, so uploads never wait on them.
+
+**Score viewer**
+- One page at a time, fitted to the screen and sharp on high-density displays.
+- Tap the right side (or swipe) for the next page, the left side for the previous one, the top
+  strip for a menu with page jump, fullscreen and download. Keyboard: Space, arrows, PageUp/Down.
+- Neighbouring pages render ahead, so turns are instant.
+
+**Accounts**
+- Native accounts with Argon2id password hashing and rate-limited sign-in.
+- Optional single sign-on with any OpenID Connect provider (Authentik, Keycloak, Google...),
+  including an admin group mapping. Password accounts remain as break-glass.
+
+| Upload with a live preview | Search as you type |
 |---|---|
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async, asyncpg), Alembic, Pydantic 2, structlog |
-| Jobs | Dramatiq on Redis |
-| Database | PostgreSQL 16 |
-| PDF | pypdf (metadata), pypdfium2 (thumbnails), pdf.js (viewer, client-side inspection) |
-| Frontend | SvelteKit 2 with Svelte 5, Vite 6, Tailwind 4, TypeScript, built as a static SPA served by FastAPI |
-| Deploy | One container image (multi-stage Dockerfile); Docker Compose for local and small installs |
+| ![Upload dialog showing page 1 of a Chopin étude and the title, composer and G-flat major key filled in from the PDF](assets/readme/upload.png) | ![Searching "chop" narrows the library to two Chopin études](assets/readme/search.png) |
 
-## Run it locally
+![Turning pages of Debussy's Clair de Lune in the score viewer](assets/readme/page-turn.gif)
 
-Requires Docker with Compose.
+## Quick start (Docker Compose)
 
 ```bash
 git clone https://github.com/mekstromjr/openclef.git
@@ -44,20 +60,64 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open http://localhost:8000 and sign in as `admin` / `password` (dev-only values from `.env.example`). The app container runs database migrations on start; a separate worker container renders thumbnails.
+Open <http://localhost:8000> and sign in with the development admin from `.env.example`
+(`admin` / `password`). Those values are deliberately weak and for local use only.
 
-Backend and frontend dev loops, every configuration variable, and the CI layout are in [docs/development.md](docs/development.md).
+The stack runs four containers: the app (API plus the web interface, which runs migrations on
+start), a background worker, PostgreSQL and Redis. Uploaded PDFs are stored in the
+`openclef-data` volume by default.
 
-## Tests and CI
+### Try it with a demo library
+
+[`scripts/seed_demo.py`](scripts/seed_demo.py) fills an empty instance with eight public-domain
+engravings from the [Mutopia Project](https://www.mutopiaproject.org) (Bach, Chopin, Debussy,
+Schubert), with full metadata. It uses only the Python standard library:
+
+```bash
+OPENCLEF_PASSWORD=password python3 scripts/seed_demo.py --url http://localhost:8000 --username admin
+```
+
+The screenshots in this README come from that demo library.
+
+## Configuration
+
+Everything is configured with `OPENCLEF_*` environment variables. The ones you will touch first:
+
+| Variable | Purpose |
+|---|---|
+| `OPENCLEF_SECRET_KEY`, `OPENCLEF_PEPPER` | Session signing key and password pepper. **Required in production.** |
+| `OPENCLEF_STORAGE_BACKEND` | `local` (a volume) or `s3` (any S3-compatible store: AWS, Garage, MinIO, R2) |
+| `OPENCLEF_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_REDIRECT_URI` | Set all four to show a "Sign in with ..." button for any OpenID Connect provider |
+| `OPENCLEF_OIDC_ADMIN_GROUP` | Members of this group (from the `groups` claim) become admins |
+
+The full list with defaults, plus the backend and frontend dev loops and the CI layout, is in
+[docs/development.md](docs/development.md).
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic, Pydantic 2, structlog |
+| Background jobs | Dramatiq on Redis; pypdfium2 renders thumbnails |
+| PDF handling | pypdf (page count, metadata) on the server; pdf.js in the browser |
+| Database | PostgreSQL 16, with a generated `tsvector` column and GIN index for search |
+| Storage | Pluggable: local filesystem or S3-compatible, with a local thumbnail cache |
+| Frontend | SvelteKit with Svelte 5 runes, TypeScript, Tailwind CSS 4, served as a static SPA by FastAPI |
+| Auth | Argon2id + signed session cookies; optional OIDC (PKCE, verified ID tokens) |
+| CI | GitLab CI: ruff + pytest against real Postgres, Redis and S3 services; svelte-check + Vitest; image build |
+
+[ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit together and why.
+
+## Development and tests
 
 ```bash
 (cd backend && uv venv -p 3.12 && uv pip install -e '.[dev]' && uv run --no-sync pytest -q)
 (cd frontend && npm ci && npm run check && npm test)
 ```
 
-- **Backend:** 164 pytest tests. Most run against real Postgres, Redis and an S3-compatible server started by testcontainers (Docker required); without Docker those tests skip and the pure unit tests still run. Coverage includes the migration round trip, full-text search and facets, upload validation, both storage backends, sessions, rate limiting and the OIDC flow.
-- **Frontend:** `svelte-check` plus Vitest unit tests for the client-side PDF inspection.
-- **CI** (GitLab, `.gitlab-ci.yml`): secret detection, `ruff`, the full backend suite with Postgres, Redis and RustFS as job services, the frontend checks, and a Kaniko image build on every merge request and on `main`.
+The 164 backend tests run against real Postgres, Redis and an S3-compatible server, started by
+testcontainers locally (Docker required) and as job services in CI. See
+[docs/development.md](docs/development.md) for running each piece on its own.
 
 ## Repository layout
 
@@ -65,8 +125,20 @@ Backend and frontend dev loops, every configuration variable, and the CI layout 
 backend/    FastAPI app, Alembic migrations, Dramatiq worker, tests
 frontend/   SvelteKit SPA, including in-app docs under src/routes/docs/
 docs/       development notes and a frozen Astro Starlight snapshot (see docs/README.md)
+scripts/    demo-library seeding
 ```
+
+## Roadmap
+
+- **Phase 1, Library** (this release): upload, parts, search, viewer, accounts and SSO.
+- **Phase 2, Performance:** setlists, per-user annotations, an offline performance mode, page
+  turns from Bluetooth pedals. The database schema already includes the tables for these.
+- **Ideas being explored:** reading titles and key signatures from scanned pages with a vision
+  model; optional metadata lookups from MusicBrainz.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache 2.0, see [LICENSE](LICENSE).
+
+Demo scores and the screenshots made from them: engravings from the
+[Mutopia Project](https://www.mutopiaproject.org), each released into the public domain.

@@ -113,6 +113,11 @@ Pydantic Settings. Defaults live in `backend/src/openclef/config.py`;
 | `OPENCLEF_OIDC_ADMIN_GROUP` | (none) | members of this `groups` claim value become admins |
 | `OPENCLEF_STATIC_DIR` | `/app/static` | where FastAPI finds the frontend build |
 
+For OIDC, register `https://<your host>/api/v1/auth/oidc/callback` as the
+redirect URI and make sure the provider has the authorization-code grant
+enabled. A first SSO sign-in creates a regular account; an existing password
+account can link SSO from Settings.
+
 ## CI
 
 `.gitlab-ci.yml` runs on every merge request and on `main`:
