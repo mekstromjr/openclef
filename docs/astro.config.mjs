@@ -17,9 +17,9 @@ export default defineConfig({
 
       social: [
         {
-          icon: "gitlab",
-          label: "GitLab",
-          href: "https://gitlab.meklab.net/meklab/openclef",
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/mekstromjr/openclef",
         },
       ],
 

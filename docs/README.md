@@ -1,5 +1,9 @@
 # OpenClef Docs
 
+> **Snapshot.** The canonical docs now live in the app at
+> `frontend/src/routes/docs/`; this Starlight site is a frozen snapshot kept as
+> groundwork for a future public site. See `src/content/docs/SNAPSHOT.md`.
+
 Documentation subsite for OpenClef, built with [Astro Starlight](https://starlight.astro.build).
 
 The eventual public URL is `openclef.meklab.net` (then `openclef.org`).
@@ -59,7 +63,6 @@ docs/
 ├── astro.config.mjs           # Site config + sidebar IA
 ├── src/
 │   ├── styles/brand.css       # Brand color + font tokens
-│   ├── assets/branding/       # Brand asset files (concept refs for now)
 │   └── content/docs/
 │       ├── index.mdx          # Landing
 │       ├── brand/             # Brand style guide (canonical)
@@ -67,12 +70,6 @@ docs/
 │       └── reference/         # API + config reference
 └── public/                    # Static files served as-is
 ```
-
-## Editing in Obsidian
-
-For editing convenience, the `src/content/docs/` directory is symlinked into
-the MekVault at `Efforts/Hobbies/Meklab/openclef/docs/`. Edits in either
-place persist — they are the same files.
 
 ## Brand source of truth
 

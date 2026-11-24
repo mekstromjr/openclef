@@ -4,9 +4,8 @@ description: Downloadable OpenClef brand assets — logos, color swatches, fonts
 ---
 
 :::caution
-This press kit is **in progress**. The branding folder currently holds
-concept references; production-grade SVGs and rasters are forthcoming. Asset
-paths below are the canonical locations once produced.
+This press kit is **in progress**. Production-grade SVGs and rasters are
+forthcoming. Asset paths below are the canonical locations once produced.
 :::
 
 ## Logo files
@@ -44,12 +43,3 @@ paths below are the canonical locations once produced.
 | Twitter/X card | 1200 × 675 | `branding/social/x-card.png` |
 | GitLab social preview | 1280 × 640 | `branding/social/gitlab-preview.png` |
 | README hero | 1600 × 600 | `branding/social/readme-hero.png` |
-
-## Current concept references
-
-These early references inform the marks above — they are not production
-assets.
-
-- `docs/src/assets/branding/concepts/concept-bracketed-clef.png`
-- `docs/src/assets/branding/concepts/concept-gemini-render.png`
-- `docs/src/assets/branding/concepts/concept-third-iteration.png`
