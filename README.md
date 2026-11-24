@@ -9,8 +9,8 @@ OpenClef is the shared shelf that feeds whatever you perform from. Everyone in t
 the same library, and nobody has to email PDFs around before a rehearsal.
 
 **Status:** early and in active development. Accounts (password and optional OIDC), PDF upload,
-search, the library and the page viewer work end to end. Setlists and annotations have database
-tables but no API or UI yet.
+search, the library, the page viewer and setlists work end to end. Annotations have a database
+table but no API or UI yet.
 
 Developed on a self-hosted GitLab; this GitHub repository is a read-only mirror. Issues and pull
 requests are not accepted here.
@@ -33,6 +33,12 @@ requests are not accepted here.
 - A live preview of page 1 next to the form, which pre-fills title, composer and key from the
   PDF's metadata and its first page (English and German key names: "in G-flat major", "Ges-Dur").
 - Thumbnails render in a background worker, so uploads never wait on them.
+
+**Setlists**
+- Put pieces in running order for a rehearsal, service or recital, choosing which part each one
+  opens. Everyone can play a setlist; its owner arranges it.
+- Play straight through: past the last page of one piece comes the first page of the next, with a
+  "Next:" banner and the next PDF already downloaded.
 
 **Score viewer**
 - One page at a time, fitted to the screen and sharp on high-density displays.
@@ -130,9 +136,10 @@ scripts/    demo-library seeding
 
 ## Roadmap
 
-- **Phase 1, Library** (this release): upload, parts, search, viewer, accounts and SSO.
-- **Phase 2, Performance:** setlists, per-user annotations, an offline performance mode, page
-  turns from Bluetooth pedals. The database schema already includes the tables for these.
+- **Phase 1, Library:** upload, parts, search, viewer, accounts and SSO.
+- **Phase 2, Performance** (in progress): setlists are done; next are an offline performance
+  mode, page turns from Bluetooth pedals, and per-user annotations (the schema already has the
+  table).
 - **Ideas being explored:** reading titles and key signatures from scanned pages with a vision
   model; optional metadata lookups from MusicBrainz.
 

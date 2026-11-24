@@ -40,6 +40,7 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path)
 };
 
@@ -191,6 +192,8 @@ export interface ArrangementDetail {
   created_at: string;
   parts: Part[];
   tags: string[];
+  /** Setlists this piece is on; a piece on a setlist can't be deleted. */
+  setlists: SetlistRef[];
 }
 
 export type ArrangementPatch = Partial<
@@ -281,4 +284,59 @@ export function uploadErrorMessage(error: unknown): string {
     default:
       return `Upload failed (${error.status}).`;
   }
+}
+
+// --- Setlists ---
+
+export interface SetlistRef {
+  id: string;
+  name: string;
+}
+
+export interface SetlistEntry {
+  position: number;
+  arrangement_id: string;
+  title: string;
+  subtitle: string | null;
+  composer: string[];
+  /** The part chosen for this entry; null opens the piece's cover part. */
+  part_id: string | null;
+  /** The part that will actually open (null only if the piece has no parts). */
+  effective_part_id: string | null;
+  part_label: string | null;
+  page_count: number | null;
+  thumbnail_ready: boolean;
+}
+
+export interface SetlistSummary {
+  id: string;
+  name: string;
+  owner_id: string;
+  owner_username: string;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+  can_edit: boolean;
+}
+
+export interface SetlistDetail extends SetlistSummary {
+  items: SetlistEntry[];
+}
+
+export interface SetlistItemWrite {
+  arrangement_id: string;
+  part_id: string | null;
+}
+
+export const SETLIST_MAX_ITEMS = 200;
+
+export function setlistErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) return 'This setlist changed somewhere else. Reload to see the latest version.';
+    if (error.status === 403) return 'Only the owner of this setlist (or an admin) can change it.';
+    if (error.detail === 'setlist_full') return `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;
+    if (error.detail === 'arrangement_not_found') return 'One of these pieces no longer exists. Reload and try again.';
+    if (error.status === 404) return 'This setlist no longer exists.';
+  }
+  return 'Saving failed. Try again.';
 }

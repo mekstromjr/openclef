@@ -15,6 +15,7 @@
   } from '$lib/api';
   import AddPartDialog from '$lib/components/library/AddPartDialog.svelte';
   import Difficulty from '$lib/components/library/Difficulty.svelte';
+  import AddToSetlistDialog from '$lib/components/setlists/AddToSetlistDialog.svelte';
   import PdfViewer from '$lib/components/viewer/PdfViewer.svelte';
   import { authState } from '$lib/stores/auth.svelte';
 
@@ -24,6 +25,8 @@
   let error = $state<string | null>(null);
   let activePartId = $state<string | null>(null);
   let addPartOpen = $state(false);
+  let addToSetlistOpen = $state(false);
+  let notice = $state<string | null>(null);
   let editing = $state(false);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
@@ -118,7 +121,9 @@
     } catch (e) {
       saveError =
         e instanceof ApiError && e.status === 409
-          ? 'This piece is on a setlist. Remove it there first.'
+          ? `This piece is on ${arrangement.setlists.length === 1 ? 'the setlist' : 'the setlists'} ${arrangement.setlists
+              .map((s) => `"${s.name}"`)
+              .join(', ')}. Remove it there first.`
           : 'Deleting failed.';
     }
   }
@@ -217,13 +222,23 @@
               <Difficulty value={arrangement.difficulty} />
             </div>
           </div>
-          <div class="flex gap-2 text-sm">
+          <div class="flex flex-wrap gap-2 text-sm">
+            {#if arrangement.parts.length}
+              <button type="button" onclick={() => (addToSetlistOpen = true)} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Add to setlist</button>
+            {/if}
             <button type="button" onclick={() => (addPartOpen = true)} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Add part</button>
             <button type="button" onclick={startEditing} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Edit</button>
           </div>
         </div>
       {/if}
 
+      {#if arrangement.setlists.length && !editing}
+        <p class="text-xs text-clef-stone-300/70">
+          On {arrangement.setlists.length === 1 ? 'setlist' : 'setlists'}
+          {#each arrangement.setlists as setlist, i (setlist.id)}{i ? ', ' : ' '}<a href="/setlists/{setlist.id}" class="text-clef-stone-100 hover:text-clef-claret">{setlist.name}</a>{/each}
+        </p>
+      {/if}
+      {#if notice}<p class="text-sm text-clef-stone-100">{notice}</p>{/if}
       {#if saveError}<p class="text-sm text-clef-claret">{saveError}</p>{/if}
 
       {#if arrangement.parts.length > 1}
@@ -261,6 +276,16 @@
       {/if}
     </section>
   </div>
+
+  <AddToSetlistDialog
+    bind:open={addToSetlistOpen}
+    arrangementId={arrangement.id}
+    partId={activePart && activePart.id !== arrangement.parts[0]?.id ? activePart.id : null}
+    onAdded={async (setlist) => {
+      notice = `Added to "${setlist.name}" (${setlist.item_count} ${setlist.item_count === 1 ? 'piece' : 'pieces'}).`;
+      await load(id);
+    }}
+  />
 
   <AddPartDialog
     bind:open={addPartOpen}
