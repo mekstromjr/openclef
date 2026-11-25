@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from pydantic import ValidationError
 from sqlalchemy import and_, func, select
 from sqlalchemy import delete as sql_delete
+from sqlalchemy import update as sql_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -508,17 +509,33 @@ async def delete_arrangement(
     arrangement_id: uuid.UUID, user: CurrentUser, db: DbSession, storage: StorageDep
 ) -> Response:
     """Delete a piece, all its parts and their files. Allowed for its owner
-    or an admin. Rows go first; a failed blob delete only orphans."""
+    or an admin. Rows go first; a failed blob delete only orphans.
+
+    Setlist entries for the piece stay, marked deleted with the title it had
+    (openclef#64)."""
     arrangement = await _load_arrangement(db, arrangement_id, user)
     if not can_manage(arrangement.owner_id, user):
         raise HTTPException(status_code=403, detail="not_arrangement_owner")
-    on_setlist = (
-        await db.execute(
-            select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement_id).limit(1)
+    # Lock the piece so a setlist add can't land between marking its entries
+    # and deleting it: the add's foreign-key check waits on this lock, then
+    # fails once the row is gone (409 arrangement_not_found), instead of
+    # leaving an entry the RESTRICT key would refuse.
+    await db.execute(select(Arrangement.id).where(Arrangement.id == arrangement_id).with_for_update())
+    # Title and owner come from the locked row in the same statement, so a
+    # rename that committed before the lock is what gets recorded.
+    await db.execute(
+        sql_update(SetlistItem)
+        .where(SetlistItem.arrangement_id == Arrangement.id, Arrangement.id == arrangement_id)
+        .values(
+            arrangement_id=None,
+            part_id=None,
+            title_snapshot=Arrangement.title,
+            piece_owner_id=Arrangement.owner_id,
+            deleted_by=user.id,
+            deleted_at=func.now(),
         )
-    ).first()
-    if on_setlist:
-        raise HTTPException(status_code=409, detail="on_a_setlist")
+        .execution_options(synchronize_session=False)
+    )
     keys = [
         key
         for storage_key, part_id, thumb in (
@@ -533,10 +550,6 @@ async def delete_arrangement(
     # A SQL DELETE, not session.delete(): Arrangement.parts is lazy="raise",
     # and the FKs already cascade parts, tags and enrichment jobs in Postgres.
     await db.execute(sql_delete(Arrangement).where(Arrangement.id == arrangement_id))
-    try:
-        await db.commit()
-    except IntegrityError:
-        # Raced with a setlist add after the check above.
-        raise HTTPException(status_code=409, detail="on_a_setlist") from None
+    await db.commit()
     await _delete_quietly(storage, *keys)
     return Response(status_code=204)

@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, StringConstraints, Tag
 
 from openclef.models.enums import (
     EditionType,
@@ -229,10 +229,10 @@ class ArrangementDetail(ArrangementRead):
 
     parts: list[PartRead]
     tags: list[str]
-    # Setlists this piece is on (a piece on a setlist can't be deleted).
+    # Setlists this piece is on. Deleting it leaves a "deleted" entry there.
     setlists: list["SetlistRef"] = []
-    # Setlists the viewer can't see that still hold the piece, so a refused
-    # delete can say why. A count only: names would leak (openclef#62).
+    # Setlists the viewer can't see that still hold the piece, so the delete
+    # confirmation can count them. A count only: names would leak (openclef#62).
     hidden_setlist_count: int = 0
     owner_username: str | None = None
     # Groups the piece is shared with. Filled for its owner only: anyone
@@ -362,6 +362,8 @@ class SetlistUpdate(BaseModel):
 
 
 class SetlistItemWrite(BaseModel):
+    """A piece to add (append, or a new entry in a saved order)."""
+
     model_config = _WRITE_CONFIG
 
     arrangement_id: _JsonUuid
@@ -369,23 +371,55 @@ class SetlistItemWrite(BaseModel):
     part_id: _JsonUuid | None = None
 
 
-class SetlistItemsReplace(BaseModel):
-    """The whole running order, first to last. Saving replaces it."""
+class SetlistItemKeep(BaseModel):
+    """An entry already on the setlist, by id. It keeps its piece and who
+    added it; only the part can change, and only on an entry the editor can
+    see. Leave `part_id` out to keep the part as it is."""
 
     model_config = _WRITE_CONFIG
 
-    items: list[SetlistItemWrite] = Field(max_length=SETLIST_MAX_ITEMS)
+    id: _JsonUuid
+    part_id: _JsonUuid | None = None
+
+
+def _entry_kind(value: Any) -> str:
+    # By shape, not by trying each model: a plain union would validate both
+    # in strict mode first, which refuses the JSON-string ids.
+    return "keep" if isinstance(value, dict) and "id" in value else "new"
+
+
+SetlistEntryWrite = Annotated[
+    Annotated[SetlistItemKeep, Tag("keep")] | Annotated[SetlistItemWrite, Tag("new")],
+    Discriminator(_entry_kind),
+]
+
+
+class SetlistItemsReplace(BaseModel):
+    """The whole running order, first to last. Saving replaces it: entries
+    left out are removed. Named `entries` (it was `items` before
+    openclef#64) so a page still sending the old shape gets a 422 instead
+    of re-adding every piece as new."""
+
+    model_config = _WRITE_CONFIG
+
+    entries: list[SetlistEntryWrite] = Field(max_length=SETLIST_MAX_ITEMS)
     expected_updated_at: _JsonDatetime | None = None
 
 
 class SetlistEntry(BaseModel):
     """One position in a setlist, with what the editor and player show.
 
-    `available` is false when the viewer can't see the piece: everything
-    but the position is then withheld."""
+    `available` is false when the viewer can't open the piece. Then
+    `removed` says why, when the viewer may know: "deleted" (by
+    `removed_by`) or "unshared" (its owner `removed_by` no longer shares it
+    with them), with the title it had. Anyone who never saw the piece gets
+    neither: everything but the position and id is withheld."""
 
+    id: uuid.UUID
     position: int
     available: bool = True
+    removed: Literal["deleted", "unshared"] | None = None
+    removed_by: str | None = None
     arrangement_id: uuid.UUID | None = None
     title: str | None = None
     subtitle: str | None = None
