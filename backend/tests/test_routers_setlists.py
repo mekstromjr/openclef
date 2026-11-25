@@ -263,24 +263,54 @@ async def test_a_deleted_entry_is_named_only_to_those_who_saw_it(app_kit):
     assert (lent_entry["removed"], lent_entry["title"], lent_entry["removed_by"]) == ("deleted", "Lent piece", "lender")
 
 
-async def test_a_racing_add_cannot_outlive_the_delete(app_kit):
-    """An add waiting on the delete's lock fails cleanly instead of leaving
-    an entry pointing at nothing."""
+async def test_an_add_in_flight_is_marked_by_the_delete(app_kit):
+    """An add that hasn't committed when the delete starts: the delete waits
+    for it (its lock on the piece), then marks that entry too, instead of
+    failing on the RESTRICT key."""
     import asyncio
 
-    await _user(app_kit, "owner")
+    owner = await _user(app_kit, "owner")
     await _login(app_kit, "owner")
     piece, _ = await _piece(app_kit, "Piece")
     setlist = await _setlist(app_kit)
-    url = f"{BASE}/{setlist['id']}/items"
-    results = await asyncio.gather(
-        app_kit.client.delete(f"/api/v1/arrangements/{piece}"),
-        *(app_kit.client.post(url, json={"arrangement_id": piece}) for _ in range(3)),
-    )
-    assert results[0].status_code == 204
-    assert all(r.status_code in (201, 409, 422) for r in results[1:]), [r.text for r in results[1:]]
-    items = (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()["items"]
-    assert all(entry["removed"] == "deleted" for entry in items)
+
+    async with app_kit.sessionmaker() as adding:
+        adding.add(
+            SetlistItem(
+                setlist_id=uuid.UUID(setlist["id"]), position=0, arrangement_id=uuid.UUID(piece), added_by=owner.id
+            )
+        )
+        await adding.flush()  # holds a key-share lock on the piece, not committed
+        deleting = asyncio.create_task(app_kit.client.delete(f"/api/v1/arrangements/{piece}"))
+        await asyncio.sleep(0.5)
+        assert not deleting.done()
+        await adding.commit()
+    assert (await deleting).status_code == 204
+    [entry] = (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()["items"]
+    assert (entry["removed"], entry["title"]) == ("deleted", "Piece")
+
+
+async def test_a_rename_in_flight_is_the_title_recorded(app_kit):
+    """The title is read from the locked row, so a rename that commits while
+    the delete waits is the one its entries keep."""
+    import asyncio
+
+    from sqlalchemy import text
+
+    await _user(app_kit, "owner")
+    await _login(app_kit, "owner")
+    piece, _ = await _piece(app_kit, "Old title")
+    setlist = await _setlist(app_kit)
+    await app_kit.client.post(f"{BASE}/{setlist['id']}/items", json={"arrangement_id": piece})
+
+    async with app_kit.sessionmaker() as renaming:
+        await renaming.execute(text("UPDATE arrangements SET title = 'New title' WHERE id = :id"), {"id": piece})
+        deleting = asyncio.create_task(app_kit.client.delete(f"/api/v1/arrangements/{piece}"))
+        await asyncio.sleep(0.5)
+        await renaming.commit()
+    assert (await deleting).status_code == 204
+    [entry] = (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()["items"]
+    assert entry["title"] == "New title"
 
 
 async def test_item_limit(app_kit):
