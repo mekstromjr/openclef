@@ -30,6 +30,9 @@ def prefix_tsquery(q: str) -> str | None:
 
 @dataclass
 class LibraryFilters:
+    # Which pieces the viewer may see (services.access.visible_arrangements).
+    # Required and never skipped, so counts and facets can't leak.
+    visible: ColumnElement[bool]
     q: str | None = None
     instrument: list[str] = field(default_factory=list)
     composer: str | None = None
@@ -43,7 +46,7 @@ class LibraryFilters:
 
     def conditions(self, *, skip: str | None = None) -> list[ColumnElement[bool]]:
         """WHERE clauses for every active filter, except the facet `skip`."""
-        clauses: list[ColumnElement[bool]] = []
+        clauses: list[ColumnElement[bool]] = [self.visible]
         if (tsq := self.tsquery()) is not None:
             clauses.append(SEARCH_VECTOR.op("@@")(func.to_tsquery("english", tsq)))
         if self.instrument and skip != "instrument":

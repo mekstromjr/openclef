@@ -24,7 +24,7 @@ from openclef.auth.deps import get_current_user
 from openclef.config import get_settings
 from openclef.db import get_session
 from openclef.models.enrichment import EnrichmentJob
-from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period, UserRole
+from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period
 from openclef.models.library import Arrangement, ArrangementTag, Part, Tag
 from openclef.models.setlist import Setlist, SetlistItem
 from openclef.models.user import User, UserSettings
@@ -41,6 +41,7 @@ from openclef.schemas import (
     SetlistRef,
     UploadResponse,
 )
+from openclef.services.access import can_manage, visible_arrangements, visible_setlists
 from openclef.services.library_search import LibraryFilters, facet_queries, order_by
 from openclef.services.pdf_meta import InvalidPdfError
 from openclef.services.uploads import (
@@ -126,7 +127,7 @@ def _facet_value(value: object) -> str:
 
 @router.get("", response_model=ArrangementList)
 async def list_arrangements(
-    _user: CurrentUser,
+    user: CurrentUser,
     db: DbSession,
     q: Annotated[str | None, Query(max_length=200)] = None,
     instrument: Annotated[list[str], Query()] = [],  # noqa: B006 (FastAPI copies it)
@@ -142,7 +143,7 @@ async def list_arrangements(
     """The library: search, filter, and facet counts for the sidebar.
     Default order is search relevance when searching, newest otherwise."""
     filters = LibraryFilters(
-        q=q, instrument=instrument, composer=composer, key=key,
+        visible=visible_arrangements(user), q=q, instrument=instrument, composer=composer, key=key,
         period=period, difficulty=difficulty, tag=tag,
     )
     where = and_(True, *filters.conditions())
@@ -233,7 +234,7 @@ async def upload_arrangement(
 
     arrangement = Arrangement(
         id=arrangement_id,
-        created_by=user.id,
+        owner_id=user.id,
         source_metadata_jsonb={"pdf_info": checked.pdf.raw} if checked.pdf.raw else None,
         field_origins_jsonb=origins,
         **fields,
@@ -289,12 +290,9 @@ async def add_part(
     label: Annotated[str | None, Form()] = None,
     instrument: Annotated[str | None, Form()] = None,
 ) -> PartRead:
-    """Add another Part (e.g. the cello part) to an existing Arrangement."""
-    exists = (
-        await db.execute(select(Arrangement.id).where(Arrangement.id == arrangement_id))
-    ).scalar_one_or_none()
-    if exists is None:
-        raise HTTPException(status_code=404, detail="arrangement_not_found")
+    """Add another Part (e.g. the cello part) to an existing Arrangement.
+    Anyone who can see the piece may: adding a part is editing, not deleting."""
+    await _load_arrangement(db, arrangement_id, user)
     checked = await _checked(file)
 
     part_id = uuid.uuid4()
@@ -331,8 +329,10 @@ async def delete_part(
     db: DbSession,
     storage: StorageDep,
 ) -> Response:
-    """Remove a Part and its files. Allowed for the uploader or an admin.
+    """Remove a Part and its files. Deleting is for the piece's owner or an
+    admin, whoever uploaded the part (openclef#60: others edit, never delete).
     The row goes first; a failed blob delete only leaves an orphan."""
+    arrangement = await _load_arrangement(db, arrangement_id, user)
     part = (
         await db.execute(
             select(Part).where(Part.id == part_id, Part.arrangement_id == arrangement_id)
@@ -340,8 +340,8 @@ async def delete_part(
     ).scalar_one_or_none()
     if part is None:
         raise HTTPException(status_code=404, detail="part_not_found")
-    if part.uploaded_by != user.id and user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="not_part_owner")
+    if not can_manage(arrangement.owner_id, user):
+        raise HTTPException(status_code=403, detail="not_arrangement_owner")
     keys = (part.storage_key, part.thumbnail_storage_key or thumbnail_key(part_id))
     await db.delete(part)
     await db.commit()
@@ -349,14 +349,20 @@ async def delete_part(
     return Response(status_code=204)
 
 
-async def _load_arrangement(db: AsyncSession, arrangement_id: uuid.UUID) -> Arrangement:
-    arrangement = await db.get(Arrangement, arrangement_id)
+async def _load_arrangement(db: AsyncSession, arrangement_id: uuid.UUID, user: User) -> Arrangement:
+    """The piece, if `user` can see it. A hidden piece is a 404, not a 403,
+    so its existence doesn't leak."""
+    arrangement = (
+        await db.execute(
+            select(Arrangement).where(Arrangement.id == arrangement_id, visible_arrangements(user))
+        )
+    ).scalar_one_or_none()
     if arrangement is None:
         raise HTTPException(status_code=404, detail="arrangement_not_found")
     return arrangement
 
 
-async def _detail(db: AsyncSession, arrangement: Arrangement) -> ArrangementDetail:
+async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> ArrangementDetail:
     parts = (
         await db.execute(
             select(Part)
@@ -375,7 +381,10 @@ async def _detail(db: AsyncSession, arrangement: Arrangement) -> ArrangementDeta
     setlists = (
         await db.execute(
             select(Setlist.id, Setlist.name)
-            .where(Setlist.id.in_(select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement.id)))
+            .where(
+                Setlist.id.in_(select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement.id)),
+                visible_setlists(user),
+            )
             .order_by(Setlist.name, Setlist.id)
         )
     ).all()
@@ -389,19 +398,19 @@ async def _detail(db: AsyncSession, arrangement: Arrangement) -> ArrangementDeta
 
 @router.get("/{arrangement_id}", response_model=ArrangementDetail)
 async def get_arrangement(
-    arrangement_id: uuid.UUID, _user: CurrentUser, db: DbSession
+    arrangement_id: uuid.UUID, user: CurrentUser, db: DbSession
 ) -> ArrangementDetail:
-    return await _detail(db, await _load_arrangement(db, arrangement_id))
+    return await _detail(db, await _load_arrangement(db, arrangement_id, user), user)
 
 
 @router.patch("/{arrangement_id}", response_model=ArrangementDetail)
 async def update_arrangement(
-    arrangement_id: uuid.UUID, payload: ArrangementUpdate, _user: CurrentUser, db: DbSession
+    arrangement_id: uuid.UUID, payload: ArrangementUpdate, user: CurrentUser, db: DbSession
 ) -> ArrangementDetail:
-    """Edit metadata. Any member may: the library is shared, and fixing a
-    typo shouldn't need the uploader. Edited fields are marked as user-set
-    so later enrichment never overwrites them."""
-    arrangement = await _load_arrangement(db, arrangement_id)
+    """Edit metadata. Anyone who can see the piece may: fixing a typo
+    shouldn't need the owner. Edited fields are marked as user-set so later
+    enrichment never overwrites them."""
+    arrangement = await _load_arrangement(db, arrangement_id, user)
     changes = payload.model_dump(exclude_unset=True)
     if "title" in changes and not changes["title"]:
         raise HTTPException(status_code=422, detail="title_required")
@@ -413,17 +422,17 @@ async def update_arrangement(
         arrangement.field_origins_jsonb = origins
     await db.commit()
     await db.refresh(arrangement)
-    return await _detail(db, arrangement)
+    return await _detail(db, arrangement, user)
 
 
 @router.delete("/{arrangement_id}", status_code=204)
 async def delete_arrangement(
     arrangement_id: uuid.UUID, user: CurrentUser, db: DbSession, storage: StorageDep
 ) -> Response:
-    """Delete a piece, all its parts and their files. Allowed for whoever
-    added it, or an admin. Rows go first; a failed blob delete only orphans."""
-    arrangement = await _load_arrangement(db, arrangement_id)
-    if arrangement.created_by != user.id and user.role != UserRole.ADMIN:
+    """Delete a piece, all its parts and their files. Allowed for its owner
+    or an admin. Rows go first; a failed blob delete only orphans."""
+    arrangement = await _load_arrangement(db, arrangement_id, user)
+    if not can_manage(arrangement.owner_id, user):
         raise HTTPException(status_code=403, detail="not_arrangement_owner")
     on_setlist = (
         await db.execute(

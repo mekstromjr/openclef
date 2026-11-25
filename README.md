@@ -5,12 +5,13 @@ them by title, composer, instrument or key, and read them in the browser with ta
 
 ![The OpenClef library: a grid of score covers with filters for instrument, composer, key and period](assets/readme/library.png)
 
-OpenClef is the shared shelf that feeds whatever you perform from. Everyone in the household sees
-the same library, and nobody has to email PDFs around before a rehearsal.
+OpenClef is the shared shelf that feeds whatever you perform from. Each person keeps their own
+library and shares it with the household, so nobody has to email PDFs around before a rehearsal.
 
 **Status:** early and in active development. Accounts (password and optional OIDC), PDF upload,
-search, the library, the page viewer and setlists work end to end. Annotations have a database
-table but no API or UI yet.
+search, the library, the page viewer and setlists work end to end. Sharing between people
+(partners and groups) is being built: the access rules are in place, so for now each account sees
+only its own library. Annotations have a database table but no API or UI yet.
 
 Developed on a self-hosted GitLab; this GitHub repository is a read-only mirror. Issues and pull
 requests are not accepted here.
@@ -36,7 +37,7 @@ requests are not accepted here.
 
 **Setlists**
 - Put pieces in running order for a rehearsal, service or recital, choosing which part each one
-  opens. Everyone can play a setlist; its owner arranges it.
+  opens. A setlist reaches whoever can see it; its owner arranges it.
 - Play straight through: past the last page of one piece comes the first page of the next, with a
   "Next:" banner and the next PDF already downloaded.
 
@@ -137,6 +138,8 @@ scripts/    demo-library seeding
 ## Roadmap
 
 - **Phase 1, Library:** upload, parts, search, viewer, accounts and SSO.
+- **Sharing** (in progress): personal libraries shared with partners (one-way, like Immich's
+  partner sharing) and groups; shared setlists that pass on what each contributor owns.
 - **Phase 2, Performance** (in progress): setlists are done; next are an offline performance
   mode, page turns from Bluetooth pedals, and per-user annotations (the schema already has the
   table).

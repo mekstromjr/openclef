@@ -1,4 +1,4 @@
-"""Serve a Part's PDF and thumbnail to any signed-in user."""
+"""Serve a Part's PDF and thumbnail to anyone who can see its piece."""
 from __future__ import annotations
 
 import uuid
@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openclef.auth.deps import get_current_user
 from openclef.db import get_session
-from openclef.models.library import Part
+from openclef.models.library import Arrangement, Part
 from openclef.models.user import User
 from openclef.routers._deps import get_storage
+from openclef.services.access import visible_arrangements
 from openclef.storage import KeyNotFoundError, Storage
 
 router = APIRouter(prefix="/api/v1/parts", tags=["parts"])
@@ -29,8 +30,15 @@ def content_disposition(kind: str, filename: str) -> str:
     return f"{kind}; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
 
 
-async def _load_part(db: AsyncSession, part_id: uuid.UUID) -> Part:
-    part = (await db.execute(select(Part).where(Part.id == part_id))).scalar_one_or_none()
+async def _load_part(db: AsyncSession, part_id: uuid.UUID, user: User) -> Part:
+    """The part, if `user` can see its piece. Hidden parts 404 like missing ones."""
+    part = (
+        await db.execute(
+            select(Part)
+            .join(Arrangement, Arrangement.id == Part.arrangement_id)
+            .where(Part.id == part_id, visible_arrangements(user))
+        )
+    ).scalar_one_or_none()
     if part is None:
         raise HTTPException(status_code=404, detail="part_not_found")
     return part
@@ -39,12 +47,12 @@ async def _load_part(db: AsyncSession, part_id: uuid.UUID) -> Part:
 @router.get("/{part_id}/file")
 async def get_part_file(
     part_id: uuid.UUID,
-    _user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_session)],
     storage: Annotated[Storage, Depends(get_storage)],
     download: bool = False,
 ) -> StreamingResponse:
-    part = await _load_part(db, part_id)
+    part = await _load_part(db, part_id, user)
     try:
         body = await storage.get(part.storage_key)
     except KeyNotFoundError:
@@ -65,11 +73,11 @@ async def get_part_file(
 @router.get("/{part_id}/thumbnail")
 async def get_part_thumbnail(
     part_id: uuid.UUID,
-    _user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_session)],
     storage: Annotated[Storage, Depends(get_storage)],
 ) -> StreamingResponse:
-    part = await _load_part(db, part_id)
+    part = await _load_part(db, part_id, user)
     if not part.thumbnail_storage_key:
         raise HTTPException(status_code=404, detail="thumbnail_pending")
     try:

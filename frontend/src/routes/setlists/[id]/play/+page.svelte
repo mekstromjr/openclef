@@ -11,7 +11,7 @@
    */
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import { ApiError, api, type SetlistDetail, type SetlistEntry } from '$lib/api';
+  import { ApiError, api, withoutHidden, type SetlistDetail, type SetlistEntry } from '$lib/api';
   import PdfViewer from '$lib/components/viewer/PdfViewer.svelte';
   import { startIndex } from '$lib/setlists/order';
 
@@ -30,7 +30,8 @@
 
   async function load(setlistId: string) {
     try {
-      const loaded = await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`);
+      // Pieces not shared with this viewer are skipped.
+      const loaded = withoutHidden(await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`)).setlist;
       setlist = loaded;
       index = startIndex(page.url.searchParams.get('at'), loaded.items.length);
       prefetchUpcoming();

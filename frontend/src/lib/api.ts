@@ -188,7 +188,7 @@ export interface ArrangementDetail {
   difficulty: number | null;
   notes: string | null;
   description: string | null;
-  created_by: string;
+  owner_id: string;
   created_at: string;
   parts: Part[];
   tags: string[];
@@ -295,6 +295,11 @@ export interface SetlistRef {
 
 export interface SetlistEntry {
   position: number;
+  /**
+   * False when this viewer can't see the piece; the API then withholds
+   * everything but the position. Pages drop these with `withoutHidden`.
+   */
+  available: boolean;
   arrangement_id: string;
   title: string;
   subtitle: string | null;
@@ -330,8 +335,16 @@ export interface SetlistItemWrite {
 
 export const SETLIST_MAX_ITEMS = 200;
 
+/** The setlist with entries this viewer can't see removed, and how many there were. */
+export function withoutHidden(setlist: SetlistDetail): { setlist: SetlistDetail; hidden: number } {
+  const items = setlist.items.filter((item) => item.available);
+  return { setlist: { ...setlist, items }, hidden: setlist.items.length - items.length };
+}
+
 export function setlistErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.detail === 'setlist_has_hidden_items')
+      return "This setlist has pieces that aren't shared with you, so its order can't be saved yet.";
     if (error.status === 409) return 'This setlist changed somewhere else. Reload to see the latest version.';
     if (error.status === 403) return 'Only the owner of this setlist (or an admin) can change it.';
     if (error.detail === 'setlist_full') return `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;

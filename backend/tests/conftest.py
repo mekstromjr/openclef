@@ -295,6 +295,11 @@ async def app_kit(
 
     # Per-test cleanup: TRUNCATE all domain tables (preserves alembic_version).
     domain_tables = [
+        "setlist_shares",
+        "arrangement_shares",
+        "group_members",
+        "groups",
+        "partnerships",
         "annotation_revisions",
         "annotations",
         "arrangement_tags",

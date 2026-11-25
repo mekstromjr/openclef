@@ -6,6 +6,7 @@
     SETLIST_MAX_ITEMS,
     api,
     setlistErrorMessage,
+    withoutHidden,
     type ArrangementDetail,
     type ArrangementSummary,
     type Part,
@@ -19,6 +20,8 @@
 
   let setlist = $state<SetlistDetail | null>(null);
   let entries = $state<SetlistEntry[]>([]);
+  /** Entries on this setlist whose piece isn't shared with this viewer. */
+  let hidden = $state(0);
   let loadError = $state<string | null>(null);
   let saveError = $state<string | null>(null);
   let saving = $state(false);
@@ -36,7 +39,9 @@
 
   async function load(setlistId: string) {
     try {
-      const loaded = await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`);
+      const shown = withoutHidden(await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`));
+      const loaded = shown.setlist;
+      hidden = shown.hidden;
       setlist = loaded;
       entries = loaded.items.map((item) => ({ ...item }));
       loadError = null;
@@ -90,6 +95,7 @@
     const added = pieces.slice(0, room).map(
       (piece, offset): SetlistEntry => ({
         position: entries.length + offset,
+        available: true,
         arrangement_id: piece.id,
         title: piece.title,
         subtitle: piece.subtitle,
@@ -115,8 +121,8 @@
         items: toWrite(entries),
         expected_updated_at: setlist.updated_at
       });
-      setlist = saved;
-      entries = saved.items.map((item) => ({ ...item }));
+      setlist = withoutHidden(saved).setlist;
+      entries = setlist.items.map((item) => ({ ...item }));
     } catch (e) {
       saveError = setlistErrorMessage(e);
     } finally {
@@ -205,6 +211,11 @@
       </div>
     {/if}
     {#if saveError}<p class="text-sm text-clef-claret">{saveError}</p>{/if}
+    {#if hidden > 0}
+      <p class="text-sm text-clef-stone-300/80">
+        {hidden} {hidden === 1 ? "piece on this setlist isn't" : "pieces on this setlist aren't"} shared with you, so {hidden === 1 ? "it's" : "they're"} not shown.
+      </p>
+    {/if}
 
     {#if entries.length === 0}
       <div class="rounded-lg border border-dashed border-clef-graphite-500 px-6 py-10 text-center text-sm text-clef-stone-300/80 space-y-2">

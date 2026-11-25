@@ -10,6 +10,7 @@ from openclef.models.library import Part
 from openclef.models.setlist import Setlist, SetlistItem
 from openclef.models.user import User
 from tests.pdf_fixtures import make_pdf
+from tests.sharing import share_library
 
 PASSWORD = "hunter2hunter2"
 
@@ -64,11 +65,12 @@ async def test_detail_unknown_is_404(app_kit):
     assert r.status_code == 404
 
 
-async def test_any_member_can_edit_and_edits_are_marked_user(app_kit):
-    await _user(app_kit, "uploader")
+async def test_a_partner_can_edit_and_edits_are_marked_user(app_kit):
+    owner = await _user(app_kit, "uploader")
     await _login(app_kit, "uploader")
     arrangement_id = (await _upload(app_kit))["arrangement"]["id"]
-    await _user(app_kit, "relative")
+    relative = await _user(app_kit, "relative")
+    await share_library(app_kit, owner.id, relative.id)
     await _login(app_kit, "relative")
 
     r = await app_kit.client.patch(
@@ -119,11 +121,12 @@ async def test_delete_by_creator_removes_rows_and_files(app_kit):
         assert await s.get(Part, uuid.UUID(part["id"])) is None
 
 
-async def test_delete_by_other_member_is_forbidden_but_admin_may(app_kit):
-    await _user(app_kit, "uploader")
+async def test_delete_by_a_partner_is_forbidden_but_admin_may(app_kit):
+    owner = await _user(app_kit, "uploader")
     await _login(app_kit, "uploader")
     arrangement_id = (await _upload(app_kit))["arrangement"]["id"]
-    await _user(app_kit, "relative")
+    relative = await _user(app_kit, "relative")
+    await share_library(app_kit, owner.id, relative.id)
     await _login(app_kit, "relative")
     assert (await app_kit.client.delete(f"/api/v1/arrangements/{arrangement_id}")).status_code == 403
     await _user(app_kit, "boss", UserRole.ADMIN)

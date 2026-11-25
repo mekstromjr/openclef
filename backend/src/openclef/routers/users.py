@@ -2,10 +2,11 @@
 
 `/users/*` is admin-only (except the /me/settings subroute, which is
 self-service for the authenticated user). Delete is non-destructive
-to the library: the deleted user's `arrangements.created_by` /
+to the library: the deleted user's `arrangements.owner_id` /
 `parts.uploaded_by` rows are repointed to a singleton `__deleted__`
 user before the original row is removed, so library content survives
-operator turnover.
+operator turnover. Under the sharing model only admins can see what the
+placeholder owns; openclef#65 replaces this with per-item reassignment.
 """
 from __future__ import annotations
 
@@ -154,7 +155,7 @@ async def delete_user(
     tombstone = await _get_or_create_tombstone(db)
     # Repoint every row that has a RESTRICT FK on this user.
     await db.execute(
-        update(Arrangement).where(Arrangement.created_by == uid).values(created_by=tombstone.id)
+        update(Arrangement).where(Arrangement.owner_id == uid).values(owner_id=tombstone.id)
     )
     await db.execute(
         update(Part).where(Part.uploaded_by == uid).values(uploaded_by=tombstone.id)

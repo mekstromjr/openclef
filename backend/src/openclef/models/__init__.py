@@ -10,10 +10,22 @@ from openclef.models.annotation import Annotation, AnnotationRevision  # noqa: F
 from openclef.models.enrichment import EnrichmentJob  # noqa: F401
 from openclef.models.library import Arrangement, ArrangementTag, Part, Tag  # noqa: F401
 from openclef.models.setlist import Setlist, SetlistItem  # noqa: F401
+from openclef.models.sharing import (  # noqa: F401
+    ArrangementShare,
+    Group,
+    GroupMember,
+    Partnership,
+    SetlistShare,
+)
 from openclef.models.user import User, UserSettings  # noqa: F401
 
 __all__ = [
     "Annotation",
+    "ArrangementShare",
+    "Group",
+    "GroupMember",
+    "Partnership",
+    "SetlistShare",
     "AnnotationRevision",
     "Arrangement",
     "ArrangementTag",

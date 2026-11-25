@@ -46,6 +46,22 @@ port to expose.
   although only enrichment has a (stub) writer today. Adding per-user scoping to annotations later
   would have meant migrating live data; getting the shape right up front costs nothing.
 
+## Ownership and sharing
+
+Every arrangement and setlist has one owner and is private by default. Others reach it three ways:
+a one-way **partnership** (the partner sees the sharer's whole library, and it doesn't chain to
+the partner's partners), a **group** the item is shared with, or a **shared setlist**, which passes
+on each piece only if whoever added it owns it, so a setlist can't be used to hand on music
+someone else lent you.
+
+All of that is one function, `services/access.py`, that returns a SQL condition. The library
+list, search, facet counts, the detail page, PDF and thumbnail downloads, and setlists all filter
+on it, so no endpoint decides visibility for itself. A hidden item answers 404 rather than 403, so
+its existence doesn't leak; anyone who can see an item may edit it, while deleting and sharing
+belong to the owner (or an admin). The test suite checks every relationship (owner, partner,
+reverse partner, partner's partner, group member, setlist audience, stranger, admin) against
+every endpoint.
+
 Every arrangement field records where its value came from (`field_origins`: user, PDF, file name),
 so automatic enrichment can never overwrite something a person typed.
 

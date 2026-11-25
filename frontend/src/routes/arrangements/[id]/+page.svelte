@@ -41,7 +41,7 @@
     arrangement?.parts.find((p) => p.id === activePartId) ?? arrangement?.parts[0] ?? null
   );
   const canDelete = $derived(
-    Boolean(arrangement && authState.user && (authState.user.role === 'admin' || authState.user.id === arrangement.created_by))
+    Boolean(arrangement && authState.user && (authState.user.role === 'admin' || authState.user.id === arrangement.owner_id))
   );
   const credits = $derived(
     arrangement

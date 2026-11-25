@@ -8,6 +8,7 @@ from openclef.auth.hashing import hash_password
 from openclef.models.enums import UserRole
 from openclef.models.user import User
 from tests.pdf_fixtures import make_pdf
+from tests.sharing import share_library
 
 PASSWORD = "hunter2hunter2"
 BASE = "/api/v1/setlists"
@@ -137,14 +138,15 @@ async def test_rejects_unknown_piece_and_foreign_part(app_kit):
     assert (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()["items"] == []
 
 
-async def test_members_can_read_but_only_owner_or_admin_can_change(app_kit):
-    await _user(app_kit, "owner")
+async def test_partners_can_read_but_only_owner_or_admin_can_change(app_kit):
+    owner = await _user(app_kit, "owner")
     await _login(app_kit, "owner")
     piece, _ = await _piece(app_kit, "Piece")
     setlist = await _setlist(app_kit)
     sid = setlist["id"]
 
-    await _user(app_kit, "member")
+    member = await _user(app_kit, "member")
+    await share_library(app_kit, owner.id, member.id)
     await _login(app_kit, "member")
     seen = (await app_kit.client.get(f"{BASE}/{sid}")).json()
     assert seen["name"] == "Sunday" and seen["can_edit"] is False

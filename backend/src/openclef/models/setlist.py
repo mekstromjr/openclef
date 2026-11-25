@@ -1,4 +1,4 @@
-"""Setlists + items (Phase 2 schema, locked in Phase 1).
+"""Setlists + items.
 
 Like the annotation tables, the schema is created now so the future
 Phase 2 UI doesn't require a destructive migration. `setlist_items`
@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, SmallInteger, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, SmallInteger, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from openclef.db import Base
@@ -19,6 +19,7 @@ from openclef.models._types import utcnow_aware
 
 class Setlist(Base):
     __tablename__ = "setlists"
+    __table_args__ = (Index("ix_setlists_owner_id", "owner_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(Text(), nullable=False)
@@ -52,6 +53,11 @@ class SetlistItem(Base):
     )
     part_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(), ForeignKey("parts.id", ondelete="SET NULL"), nullable=True
+    )
+    # Who put the piece here. A shared setlist passes a piece on to its
+    # audience only when the person who added it owns it (openclef#60).
+    added_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     setlist: Mapped[Setlist] = relationship(back_populates="items")
