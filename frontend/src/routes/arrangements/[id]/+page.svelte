@@ -15,6 +15,7 @@
   } from '$lib/api';
   import AddPartDialog from '$lib/components/library/AddPartDialog.svelte';
   import Difficulty from '$lib/components/library/Difficulty.svelte';
+  import ShareWithGroups from '$lib/components/library/ShareWithGroups.svelte';
   import AddToSetlistDialog from '$lib/components/setlists/AddToSetlistDialog.svelte';
   import PdfViewer from '$lib/components/viewer/PdfViewer.svelte';
   import { authState } from '$lib/stores/auth.svelte';
@@ -252,6 +253,9 @@
           On {arrangement.setlists.length === 1 ? 'setlist' : 'setlists'}
           {#each arrangement.setlists as setlist, i (setlist.id)}{i ? ', ' : ' '}<a href="/setlists/{setlist.id}" class="text-clef-stone-100 hover:text-clef-claret">{setlist.name}</a>{/each}
         </p>
+      {/if}
+      {#if !editing && authState.user && arrangement.owner_id === authState.user.id}
+        <ShareWithGroups {arrangement} onSaved={(updated) => (arrangement = updated)} />
       {/if}
       {#if notice}<p class="text-sm text-clef-stone-100">{notice}</p>{/if}
       {#if saveError}<p class="text-sm text-clef-claret">{saveError}</p>{/if}
