@@ -72,7 +72,7 @@ def test_upgrade_then_downgrade_is_clean(fresh_database_url):
 
     eng = create_engine(sync_url)
     with eng.connect() as conn:
-        # 11 tables expected (excluding alembic_version)
+        # 16 tables expected (excluding alembic_version)
         rows = conn.execute(
             text(
                 "SELECT tablename FROM pg_tables "
@@ -83,11 +83,16 @@ def test_upgrade_then_downgrade_is_clean(fresh_database_url):
         assert sorted(rows) == [
             "annotation_revisions",
             "annotations",
+            "arrangement_shares",
             "arrangement_tags",
             "arrangements",
             "enrichment_jobs",
+            "group_members",
+            "groups",
+            "partnerships",
             "parts",
             "setlist_items",
+            "setlist_shares",
             "setlists",
             "tags",
             "user_settings",
@@ -121,7 +126,43 @@ def test_upgrade_then_downgrade_is_clean(fresh_database_url):
         enums = conn.execute(
             text(
                 "SELECT typname FROM pg_type "
-                "WHERE typname IN ('user_role','theme','key_signature','period','edition_type','part_type','enrichment_job_status')"
+                "WHERE typname IN ('user_role','theme','key_signature','period','edition_type','part_type','enrichment_job_status','share_permission')"
             )
         ).scalars().all()
         assert enums == []
+
+
+def test_sharing_migration_keeps_existing_rows(fresh_database_url):
+    """0004 renames the owner column and credits existing setlist items to
+    the setlist's owner, without touching the data."""
+    cfg = Config(str(_ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", fresh_database_url)
+    command.upgrade(cfg, "0003_complete_key_signatures")
+
+    eng = create_engine(fresh_database_url)
+    user_id, arrangement_id, setlist_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, username, role) VALUES (:id, 'owner', 'user')"), {"id": user_id})
+        conn.execute(
+            text("INSERT INTO arrangements (id, title, created_by) VALUES (:id, 'Trio', :owner)"),
+            {"id": arrangement_id, "owner": user_id},
+        )
+        conn.execute(
+            text("INSERT INTO setlists (id, name, owner_id) VALUES (:id, 'Recital', :owner)"),
+            {"id": setlist_id, "owner": user_id},
+        )
+        conn.execute(
+            text("INSERT INTO setlist_items (setlist_id, position, arrangement_id) VALUES (:s, 0, :a)"),
+            {"s": setlist_id, "a": arrangement_id},
+        )
+
+    command.upgrade(cfg, "head")
+    with eng.connect() as conn:
+        assert conn.execute(text("SELECT owner_id FROM arrangements")).scalar_one() == user_id
+        assert conn.execute(text("SELECT added_by FROM setlist_items")).scalar_one() == user_id
+
+    command.downgrade(cfg, "0003_complete_key_signatures")
+    with eng.connect() as conn:
+        assert conn.execute(text("SELECT created_by FROM arrangements")).scalar_one() == user_id
+    command.downgrade(cfg, "base")
+    eng.dispose()

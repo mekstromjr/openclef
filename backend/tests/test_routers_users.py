@@ -124,7 +124,7 @@ async def test_delete_user_repoints_arrangements(app_kit):
         await _seed_user(s, username="boss", role=UserRole.ADMIN)
         alice = await _seed_user(s, username="alice")
         # Alice owns an arrangement
-        arr = Arrangement(title="Alice's Arrangement", created_by=alice.id)
+        arr = Arrangement(title="Alice's Arrangement", owner_id=alice.id)
         s.add(arr)
         await s.commit()
         arr_id = arr.id
@@ -147,7 +147,7 @@ async def test_delete_user_repoints_arrangements(app_kit):
         tombstone = (
             await s.execute(select(User).where(User.username == "__deleted__"))
         ).scalar_one()
-        assert surviving.created_by == tombstone.id
+        assert surviving.owner_id == tombstone.id
 
 
 async def test_admin_cannot_delete_self(app_kit):

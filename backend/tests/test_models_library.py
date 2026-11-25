@@ -76,7 +76,7 @@ async def test_part_round_trip(session):
 
 async def test_tag_and_m2m(session):
     user = await make_user(session)
-    arr = await make_arrangement(session, created_by=user.id)
+    arr = await make_arrangement(session, owner_id=user.id)
     tag = await make_tag(session, name="Wedding")
     await acreate(
         session,

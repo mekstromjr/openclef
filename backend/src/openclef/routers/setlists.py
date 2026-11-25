@@ -1,7 +1,9 @@
 """Setlists: an ordered running order of pieces for a rehearsal or service.
 
-Setlists are shared like the library: every member can see and play every
-setlist, and only its owner or an admin can change it.
+Who sees a setlist, and which of its pieces, is decided in
+openclef.services.access. Only its owner or an admin can change it for now;
+contributor permission comes with openclef#64. An entry whose piece the
+viewer can't see comes back redacted (`available: false`).
 
 Every change takes a row lock on the setlist (SELECT ... FOR UPDATE), so
 concurrent saves and appends are serialized. Clients may send the
@@ -15,6 +17,7 @@ would collide on the primary key mid-update.
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from datetime import datetime
 from typing import Annotated
 
@@ -40,6 +43,7 @@ from openclef.schemas import (
     SetlistSummary,
     SetlistUpdate,
 )
+from openclef.services.access import visible_arrangements, visible_setlists
 
 router = APIRouter(prefix="/api/v1/setlists", tags=["setlists"])
 
@@ -51,8 +55,11 @@ def _can_edit(setlist: Setlist, user: User) -> bool:
     return setlist.owner_id == user.id or user.role == UserRole.ADMIN
 
 
-async def _get(db: AsyncSession, setlist_id: uuid.UUID, *, for_update: bool = False) -> Setlist:
-    query = select(Setlist).where(Setlist.id == setlist_id)
+async def _get(
+    db: AsyncSession, setlist_id: uuid.UUID, user: User, *, for_update: bool = False
+) -> Setlist:
+    """The setlist, if `user` can see it (hidden is a 404, not a 403)."""
+    query = select(Setlist).where(Setlist.id == setlist_id, visible_setlists(user))
     if for_update:
         query = query.with_for_update()
     setlist = (await db.execute(query)).scalar_one_or_none()
@@ -64,7 +71,7 @@ async def _get(db: AsyncSession, setlist_id: uuid.UUID, *, for_update: bool = Fa
 async def _get_for_change(
     db: AsyncSession, setlist_id: uuid.UUID, user: User, expected: datetime | None
 ) -> Setlist:
-    setlist = await _get(db, setlist_id, for_update=True)
+    setlist = await _get(db, setlist_id, user, for_update=True)
     if not _can_edit(setlist, user):
         raise HTTPException(status_code=403, detail="not_setlist_owner")
     if expected is not None and expected != setlist.updated_at:
@@ -96,17 +103,20 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
     ).scalars().all()
     arrangement_ids = {item.arrangement_id for item in items}
 
+    # Only the pieces this viewer may see; the rest come back redacted.
     arrangements: dict[uuid.UUID, Arrangement] = {}
     parts_by_arrangement: dict[uuid.UUID, list[Part]] = {}
     if arrangement_ids:
         for arrangement in (
-            await db.execute(select(Arrangement).where(Arrangement.id.in_(arrangement_ids)))
+            await db.execute(
+                select(Arrangement).where(Arrangement.id.in_(arrangement_ids), visible_arrangements(user))
+            )
         ).scalars():
             arrangements[arrangement.id] = arrangement
         for part in (
             await db.execute(
                 select(Part)
-                .where(Part.arrangement_id.in_(arrangement_ids))
+                .where(Part.arrangement_id.in_(arrangements.keys()))
                 .order_by(Part.created_at, Part.id)
             )
         ).scalars():
@@ -114,7 +124,10 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
 
     entries = []
     for item in items:
-        arrangement = arrangements[item.arrangement_id]
+        arrangement = arrangements.get(item.arrangement_id)
+        if arrangement is None:
+            entries.append(SetlistEntry(position=item.position, available=False))
+            continue
         parts = parts_by_arrangement.get(item.arrangement_id, [])
         chosen = next((part for part in parts if part.id == item.part_id), None)
         # A chosen part that was deleted is SET NULL by the FK, so this only
@@ -149,13 +162,19 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
     )
 
 
-async def _check_items(db: AsyncSession, items: list[SetlistItemWrite]) -> None:
-    """Every arrangement must exist, and every chosen part must belong to it."""
+async def _check_items(db: AsyncSession, items: list[SetlistItemWrite], user: User) -> None:
+    """Every arrangement must exist and be visible to the person adding it
+    (a hidden one is reported as not found), and every chosen part must
+    belong to its arrangement."""
     arrangement_ids = {item.arrangement_id for item in items}
     if not arrangement_ids:
         return
     found = set(
-        (await db.execute(select(Arrangement.id).where(Arrangement.id.in_(arrangement_ids)))).scalars()
+        (
+            await db.execute(
+                select(Arrangement.id).where(Arrangement.id.in_(arrangement_ids), visible_arrangements(user))
+            )
+        ).scalars()
     )
     if found != arrangement_ids:
         raise HTTPException(status_code=422, detail="arrangement_not_found")
@@ -179,14 +198,14 @@ async def _commit(db: AsyncSession) -> None:
 
 
 async def _reload(db: AsyncSession, setlist_id: uuid.UUID, user: User) -> SetlistDetail:
-    setlist = await _get(db, setlist_id)
+    setlist = await _get(db, setlist_id, user)
     await db.refresh(setlist)
     return await _detail(db, setlist, user)
 
 
 @router.get("", response_model=list[SetlistSummary])
 async def list_setlists(user: CurrentUser, db: DbSession) -> list[SetlistSummary]:
-    """Every setlist, most recently changed first."""
+    """The setlists `user` can see, most recently changed first."""
     counts = (
         select(SetlistItem.setlist_id, func.count().label("item_count"))
         .group_by(SetlistItem.setlist_id)
@@ -196,6 +215,7 @@ async def list_setlists(user: CurrentUser, db: DbSession) -> list[SetlistSummary
         await db.execute(
             select(Setlist, func.coalesce(counts.c.item_count, 0))
             .outerjoin(counts, counts.c.setlist_id == Setlist.id)
+            .where(visible_setlists(user))
             .order_by(Setlist.updated_at.desc(), Setlist.id)
         )
     ).all()
@@ -225,7 +245,7 @@ async def create_setlist(payload: SetlistCreate, user: CurrentUser, db: DbSessio
 
 @router.get("/{setlist_id}", response_model=SetlistDetail)
 async def get_setlist(setlist_id: uuid.UUID, user: CurrentUser, db: DbSession) -> SetlistDetail:
-    return await _detail(db, await _get(db, setlist_id), user)
+    return await _detail(db, await _get(db, setlist_id, user), user)
 
 
 @router.patch("/{setlist_id}", response_model=SetlistDetail)
@@ -252,9 +272,40 @@ async def delete_setlist(setlist_id: uuid.UUID, user: CurrentUser, db: DbSession
 async def replace_items(
     setlist_id: uuid.UUID, payload: SetlistItemsReplace, user: CurrentUser, db: DbSession
 ) -> SetlistDetail:
-    """Save the whole running order. The same piece may appear more than once."""
+    """Save the whole running order. The same piece may appear more than once.
+
+    Each kept piece keeps its `added_by` (it decides who the piece reaches
+    through a shared setlist); new ones are credited to the editor."""
     setlist = await _get_for_change(db, setlist_id, user, payload.expected_updated_at)
-    await _check_items(db, payload.items)
+    current = (
+        await db.execute(
+            select(SetlistItem.arrangement_id, SetlistItem.added_by)
+            .where(SetlistItem.setlist_id == setlist_id)
+            .order_by(SetlistItem.position)
+        )
+    ).all()
+    visible = set(
+        (
+            await db.execute(
+                select(Arrangement.id).where(
+                    Arrangement.id.in_({arrangement_id for arrangement_id, _ in current}),
+                    visible_arrangements(user),
+                )
+            )
+        ).scalars()
+    )
+    if any(arrangement_id not in visible for arrangement_id, _ in current):
+        # The editor can't send back entries it can't see, so saving would
+        # silently drop them. Refuse until openclef#64 handles them.
+        raise HTTPException(status_code=409, detail="setlist_has_hidden_items")
+    await _check_items(db, payload.items, user)
+    adders: dict[uuid.UUID, list[uuid.UUID | None]] = defaultdict(list)
+    for arrangement_id, added_by in current:
+        adders[arrangement_id].append(added_by)
+
+    def credit(arrangement_id: uuid.UUID) -> uuid.UUID | None:
+        return adders[arrangement_id].pop(0) if adders[arrangement_id] else user.id
+
     await db.execute(sql_delete(SetlistItem).where(SetlistItem.setlist_id == setlist_id))
     db.add_all(
         SetlistItem(
@@ -262,6 +313,7 @@ async def replace_items(
             position=position,
             arrangement_id=item.arrangement_id,
             part_id=item.part_id,
+            added_by=credit(item.arrangement_id),
         )
         for position, item in enumerate(payload.items)
     )
@@ -276,7 +328,7 @@ async def append_item(
 ) -> SetlistDetail:
     """Add one piece to the end (the "Add to setlist" action)."""
     setlist = await _get_for_change(db, setlist_id, user, None)
-    await _check_items(db, [payload])
+    await _check_items(db, [payload], user)
     last = (
         await db.execute(
             select(func.max(SetlistItem.position), func.count()).where(SetlistItem.setlist_id == setlist_id)
@@ -290,6 +342,7 @@ async def append_item(
             position=0 if last[0] is None else last[0] + 1,
             arrangement_id=payload.arrangement_id,
             part_id=payload.part_id,
+            added_by=user.id,
         )
     )
     await _touch(db, setlist)

@@ -69,7 +69,9 @@ class Arrangement(Base):
     source_metadata_jsonb: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
     field_origins_jsonb: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
     movements: Mapped[list | None] = mapped_column(JSONB(), nullable=True)
-    created_by: Mapped[uuid.UUID] = mapped_column(
+    # Who the piece belongs to: only they (or an admin) may delete or share
+    # it. Others see it through openclef.services.access.
+    owner_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -88,6 +90,7 @@ class Arrangement(Base):
 
     __table_args__ = (
         Index("ix_arrangements_musicbrainz_work_id", "musicbrainz_work_id"),
+        Index("ix_arrangements_owner_id", "owner_id"),
     )
 
 

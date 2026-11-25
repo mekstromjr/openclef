@@ -3,7 +3,7 @@
 factory-boy is sync-only, so `acreate(session, FactoryCls, **overrides)`
 is the bridge: build a detached ORM instance via factory.build(), add to
 the AsyncSession, flush. SubFactory composition isn't used here — for
-parents (e.g., Arrangement.created_by → User), tests call the
+parents (e.g., Arrangement.owner_id → User), tests call the
 `make_*` convenience helpers below which compose explicitly.
 
 Sequence-based defaults (factory.Sequence) keep unique columns
@@ -152,8 +152,8 @@ async def make_user(session: AsyncSession, **kwargs: Any) -> User:
 
 
 async def make_arrangement(session: AsyncSession, **kwargs: Any) -> Arrangement:
-    if "created_by" not in kwargs:
-        kwargs["created_by"] = (await make_user(session)).id
+    if "owner_id" not in kwargs:
+        kwargs["owner_id"] = (await make_user(session)).id
     return await acreate(session, ArrangementFactory, **kwargs)
 
 

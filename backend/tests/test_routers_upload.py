@@ -13,6 +13,7 @@ from openclef.models.library import Arrangement, Part
 from openclef.models.user import User
 from openclef.workers import broker
 from tests.pdf_fixtures import make_pdf
+from tests.sharing import share_library
 
 PASSWORD = "hunter2hunter2"
 
@@ -69,7 +70,7 @@ async def test_single_part_upload_uses_pdf_metadata(app_kit):
     arrangement, part = body["arrangement"], body["part"]
     assert arrangement["title"] == "Nocturne in E-flat"
     assert arrangement["composer"] == ["A. Composer"]
-    assert arrangement["created_by"] == str(user.id)
+    assert arrangement["owner_id"] == str(user.id)
     assert part["page_count"] == 4
     assert part["file_size_bytes"] == len(pdf)
     assert part["part_type"] == "Full Score"
@@ -192,10 +193,11 @@ async def test_delete_part_by_uploader_removes_row_and_blob(app_kit):
         assert await s.get(Part, uuid.UUID(part["id"])) is None
 
 
-async def test_delete_part_by_other_member_is_forbidden(app_kit):
-    await _signed_in(app_kit, "uploader")
+async def test_delete_part_by_a_partner_is_forbidden(app_kit):
+    owner = await _signed_in(app_kit, "uploader")
     body = (await _upload(app_kit, make_pdf())).json()
-    await _seed_user(app_kit, "other")
+    other = await _seed_user(app_kit, "other")
+    await share_library(app_kit, owner.id, other.id)
     await _login(app_kit, "other")
     r = await app_kit.client.delete(
         f"/api/v1/arrangements/{body['arrangement']['id']}/parts/{body['part']['id']}"

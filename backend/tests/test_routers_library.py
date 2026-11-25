@@ -28,22 +28,22 @@ async def _seed_library(kit, user: User) -> dict:
     async with kit.sessionmaker() as s:
         rows = {
             "moonlight": await make_arrangement(
-                s, created_by=user.id, title="Moonlight Sonata",
+                s, owner_id=user.id, title="Moonlight Sonata",
                 composer=["Beethoven, Ludwig van"], instrumentation=["Piano"],
                 key_signature=KeySignature.C_SHARP_MINOR, period=Period.CLASSICAL, difficulty=4,
             ),
             "phantom": await make_arrangement(
-                s, created_by=user.id, title="The Phantom of the Opera",
+                s, owner_id=user.id, title="The Phantom of the Opera",
                 composer=["Lloyd Webber, Andrew"], instrumentation=["Piano", "Voice"],
                 key_signature=None, period=Period.CONTEMPORARY, difficulty=3,
             ),
             "swan": await make_arrangement(
-                s, created_by=user.id, title="The Swan",
+                s, owner_id=user.id, title="The Swan",
                 composer=["Saint-Saëns, Camille"], instrumentation=["Cello", "Piano"],
                 key_signature=None, period=Period.ROMANTIC, difficulty=3,
             ),
             "carol": await make_arrangement(
-                s, created_by=user.id, title="Carol of the Bells",
+                s, owner_id=user.id, title="Carol of the Bells",
                 composer=["Leontovych, Mykola"], arranger=["A. Arranger"],
                 instrumentation=["Violin", "Cello", "Piano"],
                 key_signature=None, period=None,

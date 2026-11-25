@@ -117,7 +117,7 @@ class ArrangementRead(BaseModel):
     external_links_jsonb: list[dict[str, Any]] | None
     musicbrainz_work_id: uuid.UUID | None
     movements: list[dict[str, Any]] | None
-    created_by: uuid.UUID
+    owner_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
 
@@ -369,19 +369,23 @@ class SetlistItemsReplace(BaseModel):
 
 
 class SetlistEntry(BaseModel):
-    """One position in a setlist, with what the editor and player show."""
+    """One position in a setlist, with what the editor and player show.
+
+    `available` is false when the viewer can't see the piece: everything
+    but the position is then withheld."""
 
     position: int
-    arrangement_id: uuid.UUID
-    title: str
-    subtitle: str | None
-    composer: list[str]
+    available: bool = True
+    arrangement_id: uuid.UUID | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    composer: list[str] = Field(default_factory=list)
     # What was chosen (None = cover), and the part that will actually open.
-    part_id: uuid.UUID | None
-    effective_part_id: uuid.UUID | None
-    part_label: str | None
-    page_count: int | None
-    thumbnail_ready: bool
+    part_id: uuid.UUID | None = None
+    effective_part_id: uuid.UUID | None = None
+    part_label: str | None = None
+    page_count: int | None = None
+    thumbnail_ready: bool = False
 
 
 class SetlistSummary(BaseModel):

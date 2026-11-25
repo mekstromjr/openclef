@@ -46,7 +46,7 @@
   <div class="space-y-1">
     <h1 class="font-serif text-3xl">Setlists</h1>
     <p class="text-sm text-clef-stone-300/80">
-      A running order for a rehearsal, service or recital. Everyone sees every setlist; only its owner can change it.
+      A running order for a rehearsal, service or recital. Yours are private until you share them; only a setlist's owner can change it.
     </p>
   </div>
 

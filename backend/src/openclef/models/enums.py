@@ -115,3 +115,10 @@ class EnrichmentJobStatus(str, Enum):
     SUCCEEDED = "succeeded"
     NO_MATCH = "no_match"
     FAILED = "failed"
+
+
+class SharePermission(str, Enum):
+    """What a setlist share grants: play it, or also add one's own pieces."""
+
+    VIEW = "view"
+    CONTRIBUTE = "contribute"
