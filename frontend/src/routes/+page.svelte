@@ -141,7 +141,7 @@
     <div class="py-24 text-center space-y-4">
       <p class="text-5xl text-clef-stone-600" aria-hidden="true">𝄞</p>
       <h1 class="text-2xl font-serif">Your library is empty</h1>
-      <p class="text-clef-stone-300/70">Add a PDF to start your family's shared shelf of sheet music.</p>
+      <p class="text-clef-stone-300/70">Add a PDF to start your library. Music others share with you appears here too.</p>
       <button type="button" onclick={() => (uploadOpen = true)} class="px-4 py-2 rounded-lg bg-clef-claret text-clef-ivory font-medium hover:bg-clef-claret/90">
         Add music
       </button>

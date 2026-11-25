@@ -36,7 +36,7 @@
       index = startIndex(page.url.searchParams.get('at'), loaded.items.length);
       prefetchUpcoming();
     } catch (e) {
-      error = e instanceof ApiError && e.status === 404 ? 'This setlist no longer exists.' : 'Could not load this setlist.';
+      error = e instanceof ApiError && e.status === 404 ? "This setlist doesn't exist or isn't shared with you." : 'Could not load this setlist.';
     }
   }
 

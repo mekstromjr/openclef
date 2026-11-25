@@ -57,7 +57,7 @@
       error = null;
       if (!arrangement.parts.some((p) => p.id === activePartId)) activePartId = arrangement.parts[0]?.id ?? null;
     } catch (e) {
-      error = e instanceof ApiError && e.status === 404 ? 'This piece no longer exists.' : 'Could not load this piece.';
+      error = e instanceof ApiError && e.status === 404 ? "This piece doesn't exist or isn't shared with you." : 'Could not load this piece.';
     }
   }
 

@@ -47,7 +47,7 @@
       loadError = null;
       if (loaded.can_edit) void loadParts(loaded.items.map((item) => item.arrangement_id));
     } catch (e) {
-      loadError = e instanceof ApiError && e.status === 404 ? 'This setlist no longer exists.' : 'Could not load this setlist.';
+      loadError = e instanceof ApiError && e.status === 404 ? "This setlist doesn't exist or isn't shared with you." : 'Could not load this setlist.';
     }
   }
 

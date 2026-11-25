@@ -348,8 +348,8 @@ export function setlistErrorMessage(error: unknown): string {
     if (error.status === 409) return 'This setlist changed somewhere else. Reload to see the latest version.';
     if (error.status === 403) return 'Only the owner of this setlist (or an admin) can change it.';
     if (error.detail === 'setlist_full') return `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;
-    if (error.detail === 'arrangement_not_found') return 'One of these pieces no longer exists. Reload and try again.';
-    if (error.status === 404) return 'This setlist no longer exists.';
+    if (error.detail === 'arrangement_not_found') return "One of these pieces no longer exists or isn't shared with you. Reload and try again.";
+    if (error.status === 404) return "This setlist doesn't exist or isn't shared with you.";
   }
   return 'Saving failed. Try again.';
 }
