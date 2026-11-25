@@ -9,7 +9,7 @@ A setlist is a running order: the pieces for one rehearsal, service or recital, 
 
 ## Who can see and change a setlist
 
-A setlist is yours: you see it, and so does anyone you share your library with. Only the person who created a setlist, or an admin, can rename it, reorder it, add or remove pieces, or delete it.
+A setlist is yours: you see it, and so does anyone you [share your library](/docs/guides/sharing) with. Only the person who created a setlist, or an admin, can rename it, reorder it, add or remove pieces, or delete it.
 
 ## Making a setlist
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { api, type ArrangementList, type FacetName } from '$lib/api';
+  import { api, type ArrangementList, type FacetName, type Partners } from '$lib/api';
   import ArrangementCard from '$lib/components/library/ArrangementCard.svelte';
   import FacetSidebar from '$lib/components/library/FacetSidebar.svelte';
   import UploadDialog from '$lib/components/library/UploadDialog.svelte';
@@ -21,9 +21,29 @@
   // bookmarked or shared and the back button undoes a filter.
   const params = $derived(page.url.searchParams);
   const pageNumber = $derived(Math.max(1, Number(params.get('page')) || 1));
+  // `shared_by` makes this one sharer's page (openclef#62): what they share
+  // with you, even when "Show in my library" is off for them.
+  const sharedBy = $derived(params.get('shared_by'));
+  const onlyMine = $derived(params.get('scope') === 'mine');
   const filtered = $derived(
-    Boolean(params.get('q')) || params.has('instrument') || SINGLE_VALUE.some((name) => params.has(name))
+    Boolean(params.get('q')) ||
+      onlyMine ||
+      params.has('instrument') ||
+      SINGLE_VALUE.some((name) => params.has(name))
   );
+  let sharerName = $state<string | null>(null);
+  $effect(() => {
+    const id = sharedBy;
+    sharerName = null;
+    if (!id) return;
+    api.get<Partners>('/api/v1/partners').then(
+      (partners) => {
+        if (params.get('shared_by') === id)
+          sharerName = partners.incoming.find((p) => p.id === id)?.username ?? null;
+      },
+      () => {}
+    );
+  });
   const pages = $derived(result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1);
   const activeFilterCount = $derived(
     params.getAll('instrument').length + SINGLE_VALUE.filter((name) => params.has(name)).length
@@ -98,7 +118,17 @@
 
   function clearFilters() {
     searchText = '';
-    navigate(new URLSearchParams());
+    const next = new URLSearchParams();
+    if (sharedBy) next.set('shared_by', sharedBy);
+    navigate(next);
+  }
+
+  function toggleOnlyMine() {
+    const next = new URLSearchParams(params);
+    if (onlyMine) next.delete('scope');
+    else next.set('scope', 'mine');
+    next.delete('page');
+    navigate(next);
   }
 
   function goToPage(n: number) {
@@ -113,6 +143,14 @@
 <svelte:head><title>Library · OpenClef</title></svelte:head>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+  {#if sharedBy}
+    <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <h1 class="font-serif text-2xl">
+        {sharerName ? `Shared with you by ${sharerName}` : 'Shared with you'}
+      </h1>
+      <a href="/" class="text-sm text-clef-stone-300 hover:text-clef-ivory">Back to your library</a>
+    </div>
+  {/if}
   <div class="flex flex-wrap items-center gap-3">
     <input
       type="search"
@@ -122,6 +160,16 @@
       aria-label="Search the library"
       class="flex-1 min-w-[14rem] px-4 py-2 rounded-lg bg-clef-graphite-700/60 border border-clef-graphite-500 focus:border-clef-claret focus:outline-none"
     />
+    {#if !sharedBy}
+      <button
+        type="button"
+        onclick={toggleOnlyMine}
+        aria-pressed={onlyMine}
+        class="px-3 py-2 rounded-lg border text-sm {onlyMine ? 'border-clef-claret bg-clef-graphite-700' : 'border-clef-graphite-500'}"
+      >
+        Only my music
+      </button>
+    {/if}
     <div class="flex rounded-lg border border-clef-graphite-500 overflow-hidden text-sm" role="group" aria-label="Layout">
       <button type="button" onclick={() => (layout = 'grid')} aria-pressed={layout === 'grid'} class="px-3 py-2 {layout === 'grid' ? 'bg-clef-graphite-700' : ''}">Grid</button>
       <button type="button" onclick={() => (layout = 'list')} aria-pressed={layout === 'list'} class="px-3 py-2 {layout === 'list' ? 'bg-clef-graphite-700' : ''}">List</button>
@@ -137,6 +185,10 @@
 
   {#if error}
     <p class="text-clef-claret text-sm">Couldn't load the library: {error}</p>
+  {:else if result && result.total === 0 && !filtered && sharedBy}
+    <p class="py-16 text-center text-clef-stone-300">
+      {sharerName ?? 'This person'} isn't sharing any music with you.
+    </p>
   {:else if result && result.total === 0 && !filtered}
     <div class="py-24 text-center space-y-4">
       <p class="text-5xl text-clef-stone-600" aria-hidden="true">𝄞</p>
