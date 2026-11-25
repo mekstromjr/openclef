@@ -75,6 +75,12 @@ nobody else can, admins included: the override covers opening, not handing music
 a member handing their music to the others, so it ends when that member leaves or is removed.
 To anyone outside, a group does not exist (every group route answers 404).
 
+A setlist entry has a stable id and outlives its piece. Deleting a piece turns its entries into
+"deleted" records (the title then, who deleted it, whose piece it was) instead of refusing, and an
+entry whose piece is no longer shared stays as it was. Saving a running order sends existing entries
+back by id, so an editor can't drop or rewrite entries they can't see. What such an entry says is
+decided on the server: only people who saw the piece before get its title.
+
 Every arrangement field records where its value came from (`field_origins`: user, PDF, file name),
 so automatic enrichment can never overwrite something a person typed.
 

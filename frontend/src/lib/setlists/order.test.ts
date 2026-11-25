@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moveItem, orderChanged, removeItem, startIndex, toWrite } from './order';
+import { moveItem, orderChanged, playPosition, removeItem, startIndex, toWrite } from './order';
 
 describe('moveItem', () => {
   const list = ['a', 'b', 'c', 'd'];
@@ -29,17 +29,32 @@ describe('removeItem', () => {
 });
 
 describe('toWrite / orderChanged', () => {
-  const entry = (arrangement_id: string, part_id: string | null = null) => ({
-    arrangement_id, part_id, title: 'x', position: 0
+  const entry = (id: string | null, arrangement_id: string | null, part_id: string | null = null, available = true) => ({
+    id, arrangement_id, part_id, available, title: 'x', position: 0
   });
-  it('keeps only arrangement and part', () => {
-    expect(toWrite([entry('a', 'p1')])).toEqual([{ arrangement_id: 'a', part_id: 'p1' }]);
+  it('sends kept entries by id and new ones by piece', () => {
+    expect(toWrite([entry('e1', 'a', 'p1'), entry(null, 'b')])).toEqual([
+      { id: 'e1', part_id: 'p1' },
+      { arrangement_id: 'b', part_id: null }
+    ]);
   });
-  it('detects reorders and part changes, not object identity', () => {
-    const saved = [entry('a'), entry('b')];
-    expect(orderChanged(saved, [entry('a'), entry('b')])).toBe(false);
-    expect(orderChanged(saved, [entry('b'), entry('a')])).toBe(true);
-    expect(orderChanged(saved, [entry('a', 'p2'), entry('b')])).toBe(true);
+  it("sends an entry the viewer can't open as its id alone", () => {
+    expect(toWrite([entry('e2', null, null, false)])).toEqual([{ id: 'e2' }]);
+  });
+  it('detects reorders, removals and part changes, not object identity', () => {
+    const saved = [entry('e1', 'a'), entry('e2', null, null, false)];
+    expect(orderChanged(saved, [entry('e1', 'a'), entry('e2', null, null, false)])).toBe(false);
+    expect(orderChanged(saved, [entry('e2', null, null, false), entry('e1', 'a')])).toBe(true);
+    expect(orderChanged(saved, [entry('e1', 'a')])).toBe(true);
+    expect(orderChanged(saved, [entry('e1', 'a', 'p2'), entry('e2', null, null, false)])).toBe(true);
+  });
+});
+
+describe('playPosition', () => {
+  it('counts only entries the player opens', () => {
+    const entries = [{ available: true }, { available: false }, { available: true }];
+    expect(playPosition(entries, 0)).toBe(1);
+    expect(playPosition(entries, 2)).toBe(2);
   });
 });
 
