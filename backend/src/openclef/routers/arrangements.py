@@ -516,14 +516,25 @@ async def delete_arrangement(
     arrangement = await _load_arrangement(db, arrangement_id, user)
     if not can_manage(arrangement.owner_id, user):
         raise HTTPException(status_code=403, detail="not_arrangement_owner")
-    # Lock the piece so a setlist add can't land between marking its entries
-    # and deleting it: the add's foreign-key check waits on this lock, then
-    # fails once the row is gone (409 arrangement_not_found), instead of
-    # leaving an entry the RESTRICT key would refuse.
+    # Locks in the order saves and appends take them, setlist then piece, so
+    # a delete racing a save waits instead of deadlocking. First the setlists
+    # holding the piece (by id, so two deletes agree on the order).
+    holding = select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement_id)
+    locked = set(
+        (
+            await db.execute(
+                select(Setlist.id).where(Setlist.id.in_(holding)).order_by(Setlist.id).with_for_update()
+            )
+        ).scalars()
+    )
+    # Then the piece, so an add can't land between marking its entries and
+    # deleting it: the add's foreign-key check waits on this lock, then fails
+    # once the row is gone (409 arrangement_not_found), instead of leaving an
+    # entry the RESTRICT key would refuse.
     await db.execute(select(Arrangement.id).where(Arrangement.id == arrangement_id).with_for_update())
     # Title and owner come from the locked row in the same statement, so a
     # rename that committed before the lock is what gets recorded.
-    await db.execute(
+    marked = await db.execute(
         sql_update(SetlistItem)
         .where(SetlistItem.arrangement_id == Arrangement.id, Arrangement.id == arrangement_id)
         .values(
@@ -534,8 +545,19 @@ async def delete_arrangement(
             deleted_by=user.id,
             deleted_at=func.now(),
         )
+        .returning(SetlistItem.setlist_id)
         .execution_options(synchronize_session=False)
     )
+    # The setlists changed, so a tab holding an older copy gets 409 on save.
+    # Only the ones locked above: locking another now would invert the order.
+    changed = set(marked.scalars()) & locked
+    if changed:
+        await db.execute(
+            sql_update(Setlist)
+            .where(Setlist.id.in_(changed))
+            .values(updated_at=func.clock_timestamp())
+            .execution_options(synchronize_session=False)
+        )
     keys = [
         key
         for storage_key, part_id, thumb in (

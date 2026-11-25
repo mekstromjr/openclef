@@ -290,6 +290,38 @@ async def test_an_add_in_flight_is_marked_by_the_delete(app_kit):
     assert (entry["removed"], entry["title"]) == ("deleted", "Piece")
 
 
+async def test_a_save_in_flight_and_a_delete_do_not_deadlock(app_kit):
+    """A save holds the setlist and has removed its rows; the delete waits for
+    it (setlist before piece, as saves lock), then marks what the save put
+    back, and the setlist's version moves on."""
+    import asyncio
+
+    from sqlalchemy import text
+
+    owner = await _user(app_kit, "owner")
+    await _login(app_kit, "owner")
+    piece, _ = await _piece(app_kit, "Piece")
+    setlist = await _setlist(app_kit)
+    await app_kit.client.post(f"{BASE}/{setlist['id']}/items", json={"arrangement_id": piece})
+    version = (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()["updated_at"]
+
+    async with app_kit.sessionmaker() as saving:
+        await saving.execute(text("SELECT id FROM setlists WHERE id = :id FOR UPDATE"), {"id": setlist["id"]})
+        await saving.execute(text("DELETE FROM setlist_items WHERE setlist_id = :id"), {"id": setlist["id"]})
+        deleting = asyncio.create_task(app_kit.client.delete(f"/api/v1/arrangements/{piece}"))
+        await asyncio.sleep(0.5)
+        saving.add(
+            SetlistItem(
+                setlist_id=uuid.UUID(setlist["id"]), position=0, arrangement_id=uuid.UUID(piece), added_by=owner.id
+            )
+        )
+        await saving.commit()
+    assert (await deleting).status_code == 204
+    after = (await app_kit.client.get(f"{BASE}/{setlist['id']}")).json()
+    assert [entry["removed"] for entry in after["items"]] == ["deleted"]
+    assert after["updated_at"] != version
+
+
 async def test_a_rename_in_flight_is_the_title_recorded(app_kit):
     """The title is read from the locked row, so a rename that commits while
     the delete waits is the one its entries keep."""
