@@ -120,12 +120,24 @@
       await goto('/');
     } catch (e) {
       saveError =
-        e instanceof ApiError && e.status === 409
-          ? `This piece is on ${arrangement.setlists.length === 1 ? 'the setlist' : 'the setlists'} ${arrangement.setlists
-              .map((s) => `"${s.name}"`)
-              .join(', ')}. Remove it there first.`
-          : 'Deleting failed.';
+        e instanceof ApiError && e.status === 409 ? onSetlistsMessage() : 'Deleting failed.';
     }
+  }
+
+  // Name the setlists you can see; count the ones you can't (a partner's
+  // setlist holding your piece), so the refusal is never a dead end.
+  function onSetlistsMessage(): string {
+    if (!arrangement) return '';
+    const named = arrangement.setlists.map((s) => `"${s.name}"`).join(', ');
+    const hidden = arrangement.hidden_setlist_count;
+    const hiddenText = hidden
+      ? `${hidden} ${hidden === 1 ? 'setlist' : 'setlists'} that ${hidden === 1 ? "isn't" : "aren't"} shared with you`
+      : '';
+    if (!named) return `This piece is on ${hiddenText}. Ask whoever owns ${hidden === 1 ? 'it' : 'them'} to remove it first.`;
+    const where = `${arrangement.setlists.length === 1 ? 'the setlist' : 'the setlists'} ${named}`;
+    return hidden
+      ? `This piece is on ${where}, and on ${hiddenText}. Remove it from all of them first.`
+      : `This piece is on ${where}. Remove it there first.`;
   }
 
   async function removePart(part: Part) {
@@ -213,6 +225,9 @@
             <h1 class="font-serif text-2xl sm:text-3xl leading-tight">{arrangement.title}</h1>
             {#if arrangement.subtitle}<p class="text-clef-stone-300">{arrangement.subtitle}</p>{/if}
             {#if credits}<p class="text-sm text-clef-stone-300/80">{credits}</p>{/if}
+            {#if authState.user && arrangement.owner_id !== authState.user.id && arrangement.owner_username}
+              <p class="text-xs text-clef-stone-300/70">Shared by {arrangement.owner_username}</p>
+            {/if}
             <div class="flex flex-wrap items-center gap-2 pt-1 text-xs">
               {#if arrangement.key_signature}<span class="px-2 py-0.5 rounded-full bg-clef-graphite-700">{formatKey(arrangement.key_signature)}</span>{/if}
               {#if arrangement.period}<span class="px-2 py-0.5 rounded-full bg-clef-graphite-700">{arrangement.period}</span>{/if}

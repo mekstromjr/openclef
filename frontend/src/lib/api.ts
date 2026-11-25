@@ -141,6 +141,9 @@ export interface ArrangementSummary {
   part_count: number;
   cover_part_id: string | null;
   cover_thumbnail_ready: boolean;
+  /** Whose library the piece is in; not you means it's shared with you. */
+  owner_id: string;
+  owner_username: string;
 }
 
 export interface FacetCount {
@@ -194,6 +197,28 @@ export interface ArrangementDetail {
   tags: string[];
   /** Setlists this piece is on; a piece on a setlist can't be deleted. */
   setlists: SetlistRef[];
+  /** Setlists holding the piece that aren't shared with you (a count only). */
+  hidden_setlist_count: number;
+  owner_username: string | null;
+}
+
+// --- Sharing (openclef#62) ---
+
+/** Another account: just a name to pick a partner by. */
+export interface Person {
+  id: string;
+  username: string;
+}
+
+export interface IncomingPartner extends Person {
+  show_in_library: boolean;
+}
+
+export interface Partners {
+  /** People I share my library with. */
+  outgoing: Person[];
+  /** People who share their library with me. */
+  incoming: IncomingPartner[];
 }
 
 export type ArrangementPatch = Partial<

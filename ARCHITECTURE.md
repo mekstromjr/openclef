@@ -62,6 +62,13 @@ belong to the owner (or an admin). The test suite checks every relationship (own
 reverse partner, partner's partner, group member, setlist audience, stranger, admin) against
 every endpoint.
 
+What the library page *lists* is a second, narrower question than what a person can *open*
+(`in_library`, always ANDed with the access rule). It lists your own pieces, group shares, and
+partners' pieces unless you turned "Show in my library" off for that partner. Pieces reached
+only through someone's setlist open from that setlist but aren't listed, and an admin's library
+lists the same as anyone's: the admin override is for opening, not for flooding one library with
+everyone's music. Keeping the two apart means the toggle can never break a setlist.
+
 Every arrangement field records where its value came from (`field_origins`: user, PDF, file name),
 so automatic enrichment can never overwrite something a person typed.
 

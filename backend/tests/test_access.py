@@ -126,6 +126,9 @@ CASES = [
     ("admin", _stranger, True, True, UserRole.ADMIN),
 ]
 IDS = [case[0] for case in CASES]
+# What the library page lists is narrower than what opens (openclef#62):
+# pieces reached through a setlist, and the admin override, aren't listed.
+LISTED = {"owner", "partner", "group_member"}
 
 
 async def _viewer(kit, world, name, relate, role):
@@ -144,14 +147,16 @@ async def test_reads_follow_the_access_rule(app_kit, name, relate, sees_piece, s
     await _viewer(kit, world, name, relate, role)
     client = kit.client
 
+    listed = name in LISTED
+    assert not listed or sees_piece  # never list what can't be opened
     library = (await client.get("/api/v1/arrangements")).json()
-    assert ([item["id"] for item in library["items"]] == [world.piece]) is sees_piece
-    assert library["total"] == (1 if sees_piece else 0)
-    # Facet counts come from the same filter, so hidden pieces aren't counted.
+    assert ([item["id"] for item in library["items"]] == [world.piece]) is listed
+    assert library["total"] == (1 if listed else 0)
+    # Facet counts come from the same filter, so unlisted pieces aren't counted.
     composers = {facet["value"]: facet["count"] for facet in library["facets"]["composer"]}
-    assert composers == ({"Owner Composer": 1} if sees_piece else {})
+    assert composers == ({"Owner Composer": 1} if listed else {})
     searched = (await client.get("/api/v1/arrangements", params={"q": "trio"})).json()
-    assert searched["total"] == (1 if sees_piece else 0)
+    assert searched["total"] == (1 if listed else 0)
 
     detail = await client.get(f"/api/v1/arrangements/{world.piece}")
     assert detail.status_code == (200 if sees_piece else 404)

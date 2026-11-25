@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ApiError, api, startSso, type OidcConfig, type UserSettings } from '$lib/api';
+  import SharingSettings from '$lib/components/settings/SharingSettings.svelte';
   import { authState, bootstrap } from '$lib/stores/auth.svelte';
 
   let sso = $state<OidcConfig | null>(null);
@@ -56,7 +57,7 @@
   <header>
     <h1 class="text-2xl font-serif font-semibold">Settings</h1>
     <p class="text-sm text-clef-stone-300/70 mt-1">
-      Personal preferences. Library content settings live elsewhere.
+      Personal preferences and who you share your library with.
     </p>
   </header>
 
@@ -117,6 +118,8 @@
   {:else if !error}
     <div class="text-sm text-clef-stone-300/70">Loading…</div>
   {/if}
+
+  <SharingSettings />
 
   {#if sso?.enabled && authState.user}
     <section class="space-y-3 border-t border-clef-graphite-500 pt-6">
