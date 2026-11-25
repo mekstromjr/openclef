@@ -129,7 +129,7 @@
         </ul>
         <p class="text-xs text-clef-stone-300/70">
           Turning "Show in my library" off only hides their music from your main library. It stays
-          on their page and in your setlists.
+          on their page and in your setlists, and pieces they share with a group you're in still show.
         </p>
       {:else}
         <p class="text-sm text-clef-stone-300/70">Nobody shares their library with you yet.</p>

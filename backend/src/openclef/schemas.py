@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from openclef.models.enums import (
     EditionType,
@@ -235,6 +235,9 @@ class ArrangementDetail(ArrangementRead):
     # delete can say why. A count only: names would leak (openclef#62).
     hidden_setlist_count: int = 0
     owner_username: str | None = None
+    # Groups the piece is shared with. Filled for its owner only: anyone
+    # else would learn about groups they aren't in (openclef#63).
+    groups: list["GroupRef"] = []
 
 
 class ArrangementSummary(BaseModel):
@@ -464,6 +467,50 @@ class IncomingPartnerUpdate(BaseModel):
     model_config = _WRITE_CONFIG
 
     show_in_library: bool
+
+
+# --- Sharing: groups (openclef#63) -------------------------------------
+
+GroupName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class GroupRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class GroupRead(GroupRef):
+    """A group as its members see it. Non-members never get one."""
+
+    owner: Person
+    # Everyone in the group, the owner included, by username.
+    members: list[Person]
+
+
+class GroupCreate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    name: GroupName
+
+
+class GroupUpdate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    name: GroupName
+
+
+class GroupMemberCreate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    user_id: _JsonUuid
+
+
+class ArrangementSharesUpdate(BaseModel):
+    """The whole set of groups a piece is shared with (replaces it)."""
+
+    model_config = _WRITE_CONFIG
+
+    group_ids: list[_JsonUuid] = Field(max_length=100)
 
 
 # ArrangementDetail refers to SetlistRef, defined later in this module.

@@ -69,6 +69,12 @@ only through someone's setlist open from that setlist but aren't listed, and an 
 lists the same as anyone's: the admin override is for opening, not for flooding one library with
 everyone's music. Keeping the two apart means the toggle can never break a setlist.
 
+Groups are sets of members; the creator owns one and is stored as its first member, because the
+access rule reads membership only. A piece's owner shares it into groups they belong to, and
+nobody else can, admins included: the override covers opening, not handing music out. A share is
+a member handing their music to the others, so it ends when that member leaves or is removed.
+To anyone outside, a group does not exist (every group route answers 404).
+
 Every arrangement field records where its value came from (`field_origins`: user, PDF, file name),
 so automatic enrichment can never overwrite something a person typed.
 

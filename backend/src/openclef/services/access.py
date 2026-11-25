@@ -93,18 +93,30 @@ def visible_arrangements(user: User) -> ColumnElement[bool]:
 
 
 def in_library(
-    user: User, *, scope: str = "all", shared_by: uuid.UUID | None = None
+    user: User,
+    *,
+    scope: str = "all",
+    shared_by: uuid.UUID | None = None,
+    group: uuid.UUID | None = None,
 ) -> ColumnElement[bool]:
     """WHERE clause on `Arrangement` for what `user`'s library page lists.
 
     - `scope="mine"`: only what they own ("Only my music").
     - `shared_by`: what that one person shares with them, whatever the
       "Show in my library" toggle says (the per-sharer page).
+    - `group`: what is shared with that group, if they're in it (the group
+      page, openclef#63). Nothing for a group they aren't in.
     - otherwise: own + group shares + partners shown in the library.
 
     Always ANDed with `visible_arrangements`, so a listing can never show
     something the user couldn't open."""
-    if scope == "mine":
+    if group is not None:
+        in_group = select(ArrangementShare.arrangement_id).where(
+            ArrangementShare.group_id == group,
+            ArrangementShare.group_id.in_(_groups_of(user)),
+        )
+        listed = Arrangement.id.in_(in_group)
+    elif scope == "mine":
         listed = Arrangement.owner_id == user.id
     else:
         partners = select(Partnership.sharer_id).where(Partnership.partner_id == user.id)

@@ -200,6 +200,8 @@ export interface ArrangementDetail {
   /** Setlists holding the piece that aren't shared with you (a count only). */
   hidden_setlist_count: number;
   owner_username: string | null;
+  /** Groups the piece is shared with. Filled for its owner only. */
+  groups: GroupRef[];
 }
 
 // --- Sharing (openclef#62) ---
@@ -219,6 +221,19 @@ export interface Partners {
   outgoing: Person[];
   /** People who share their library with me. */
   incoming: IncomingPartner[];
+}
+
+// --- Groups (openclef#63) ---
+
+export interface GroupRef {
+  id: string;
+  name: string;
+}
+
+/** A group I'm in. Owning one makes me a member too. */
+export interface Group extends GroupRef {
+  owner: Person;
+  members: Person[];
 }
 
 export type ArrangementPatch = Partial<

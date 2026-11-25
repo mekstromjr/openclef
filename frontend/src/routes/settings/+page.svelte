@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ApiError, api, startSso, type OidcConfig, type UserSettings } from '$lib/api';
+  import GroupSettings from '$lib/components/settings/GroupSettings.svelte';
   import SharingSettings from '$lib/components/settings/SharingSettings.svelte';
   import { authState, bootstrap } from '$lib/stores/auth.svelte';
 
@@ -120,6 +121,7 @@
   {/if}
 
   <SharingSettings />
+  <GroupSettings />
 
   {#if sso?.enabled && authState.user}
     <section class="space-y-3 border-t border-clef-graphite-500 pt-6">

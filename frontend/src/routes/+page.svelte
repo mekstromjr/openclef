@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { api, type ArrangementList, type FacetName, type Partners } from '$lib/api';
+  import { api, type ArrangementList, type FacetName, type Group, type Person } from '$lib/api';
   import ArrangementCard from '$lib/components/library/ArrangementCard.svelte';
   import FacetSidebar from '$lib/components/library/FacetSidebar.svelte';
   import UploadDialog from '$lib/components/library/UploadDialog.svelte';
@@ -22,8 +22,10 @@
   const params = $derived(page.url.searchParams);
   const pageNumber = $derived(Math.max(1, Number(params.get('page')) || 1));
   // `shared_by` makes this one sharer's page (openclef#62): what they share
-  // with you, even when "Show in my library" is off for them.
+  // with you, even when "Show in my library" is off for them. `group` is one
+  // group's page (openclef#63): what its members share into it.
   const sharedBy = $derived(params.get('shared_by'));
+  const groupId = $derived(params.get('group'));
   const onlyMine = $derived(params.get('scope') === 'mine');
   const filtered = $derived(
     Boolean(params.get('q')) ||
@@ -31,18 +33,29 @@
       params.has('instrument') ||
       SINGLE_VALUE.some((name) => params.has(name))
   );
-  let sharerName = $state<string | null>(null);
+  // The heading's name. From /people, not /partners: someone you know only
+  // through a group shares with you too.
+  let viewName = $state<string | null>(null);
   $effect(() => {
-    const id = sharedBy;
-    sharerName = null;
-    if (!id) return;
-    api.get<Partners>('/api/v1/partners').then(
-      (partners) => {
-        if (params.get('shared_by') === id)
-          sharerName = partners.incoming.find((p) => p.id === id)?.username ?? null;
-      },
-      () => {}
-    );
+    const sharer = sharedBy;
+    const group = groupId;
+    viewName = null;
+    if (group) {
+      api.get<Group[]>('/api/v1/groups').then(
+        (groups) => {
+          if (params.get('group') === group) viewName = groups.find((g) => g.id === group)?.name ?? null;
+        },
+        () => {}
+      );
+    } else if (sharer) {
+      api.get<Person[]>('/api/v1/people').then(
+        (people) => {
+          if (params.get('shared_by') === sharer)
+            viewName = people.find((p) => p.id === sharer)?.username ?? null;
+        },
+        () => {}
+      );
+    }
   });
   const pages = $derived(result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1);
   const activeFilterCount = $derived(
@@ -119,7 +132,8 @@
   function clearFilters() {
     searchText = '';
     const next = new URLSearchParams();
-    if (sharedBy) next.set('shared_by', sharedBy);
+    if (groupId) next.set('group', groupId);
+    else if (sharedBy) next.set('shared_by', sharedBy);
     navigate(next);
   }
 
@@ -143,10 +157,14 @@
 <svelte:head><title>Library · OpenClef</title></svelte:head>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-  {#if sharedBy}
+  {#if groupId || sharedBy}
     <div class="flex flex-wrap items-baseline justify-between gap-2">
       <h1 class="font-serif text-2xl">
-        {sharerName ? `Shared with you by ${sharerName}` : 'Shared with you'}
+        {#if groupId}
+          {viewName ? `Shared with ${viewName}` : 'Shared with a group'}
+        {:else}
+          {viewName ? `Shared with you by ${viewName}` : 'Shared with you'}
+        {/if}
       </h1>
       <a href="/" class="text-sm text-clef-stone-300 hover:text-clef-ivory">Back to your library</a>
     </div>
@@ -160,7 +178,7 @@
       aria-label="Search the library"
       class="flex-1 min-w-[14rem] px-4 py-2 rounded-lg bg-clef-graphite-700/60 border border-clef-graphite-500 focus:border-clef-claret focus:outline-none"
     />
-    {#if !sharedBy}
+    {#if !sharedBy && !groupId}
       <button
         type="button"
         onclick={toggleOnlyMine}
@@ -185,9 +203,13 @@
 
   {#if error}
     <p class="text-clef-claret text-sm">Couldn't load the library: {error}</p>
+  {:else if result && result.total === 0 && !filtered && groupId}
+    <p class="py-16 text-center text-clef-stone-300">
+      Nothing is shared with {viewName ?? 'this group'} yet. Share a piece from its page.
+    </p>
   {:else if result && result.total === 0 && !filtered && sharedBy}
     <p class="py-16 text-center text-clef-stone-300">
-      {sharerName ?? 'This person'} isn't sharing any music with you.
+      {viewName ?? 'This person'} isn't sharing any music with you.
     </p>
   {:else if result && result.total === 0 && !filtered}
     <div class="py-24 text-center space-y-4">
