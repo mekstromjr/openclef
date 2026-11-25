@@ -195,7 +195,7 @@ export interface ArrangementDetail {
   created_at: string;
   parts: Part[];
   tags: string[];
-  /** Setlists this piece is on; a piece on a setlist can't be deleted. */
+  /** Setlists this piece is on; deleting it leaves a "deleted" entry in each. */
   setlists: SetlistRef[];
   /** Setlists holding the piece that aren't shared with you (a count only). */
   hidden_setlist_count: number;
@@ -334,14 +334,21 @@ export interface SetlistRef {
 }
 
 export interface SetlistEntry {
+  /** Stable per entry: saving sends existing entries back by id. */
+  id: string;
   position: number;
   /**
-   * False when this viewer can't see the piece; the API then withholds
-   * everything but the position. Pages drop these with `withoutHidden`.
+   * False when this viewer can't open the piece. `removed` then says why,
+   * if the viewer saw the piece before: "deleted" (by `removed_by`) or
+   * "unshared" (its owner `removed_by` no longer shares it with them), with
+   * `title` as it was. Otherwise everything but the position is withheld.
+   * The player skips these with `playable`.
    */
   available: boolean;
-  arrangement_id: string;
-  title: string;
+  removed: 'deleted' | 'unshared' | null;
+  removed_by: string | null;
+  arrangement_id: string | null;
+  title: string | null;
   subtitle: string | null;
   composer: string[];
   /** The part chosen for this entry; null opens the piece's cover part. */
@@ -368,23 +375,29 @@ export interface SetlistDetail extends SetlistSummary {
   items: SetlistEntry[];
 }
 
+/** A piece to add to a setlist. */
 export interface SetlistItemWrite {
   arrangement_id: string;
   part_id: string | null;
 }
 
+/** An entry already on the setlist; leave `part_id` out to keep its part. */
+export interface SetlistItemKeep {
+  id: string;
+  part_id?: string | null;
+}
+
 export const SETLIST_MAX_ITEMS = 200;
 
-/** The setlist with entries this viewer can't see removed, and how many there were. */
-export function withoutHidden(setlist: SetlistDetail): { setlist: SetlistDetail; hidden: number } {
-  const items = setlist.items.filter((item) => item.available);
-  return { setlist: { ...setlist, items }, hidden: setlist.items.length - items.length };
+/** The setlist with only the entries this viewer can open, for the player. */
+export function playable(setlist: SetlistDetail): SetlistDetail {
+  return { ...setlist, items: setlist.items.filter((item) => item.available) };
 }
 
 export function setlistErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.detail === 'setlist_has_hidden_items')
-      return "This setlist has pieces that aren't shared with you, so its order can't be saved yet.";
+    if (['item_not_found', 'duplicate_item', 'item_hidden'].includes(error.detail as string))
+      return 'This setlist changed somewhere else. Reload to see the latest version.';
     if (error.status === 409) return 'This setlist changed somewhere else. Reload to see the latest version.';
     if (error.status === 403) return 'Only the owner of this setlist (or an admin) can change it.';
     if (error.detail === 'setlist_full') return `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;

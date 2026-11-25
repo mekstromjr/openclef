@@ -52,4 +52,8 @@ Under **Shared with me** in Settings:
 
 ## Deleting a shared piece
 
-Only the person who owns a piece, or an admin, can delete it, and not while it is on a setlist. If someone you share with put it on one of their setlists, the piece's page says how many setlists you can't see are holding it. Ask them to remove it first.
+Only the person who owns a piece, or an admin, can delete it, even while it is on setlists. The confirmation says how many setlists hold it, including ones you can't see, such as a partner's setlist.
+
+Each of those setlists keeps an entry that says "*Title* was deleted by *name*". The title is shown only to people who saw the piece: the setlist's owner, whoever added the piece, and the setlist's audience if the piece had reached them. Everyone else sees only that a piece isn't shared with them.
+
+When you stop sharing a piece instead, a setlist that holds it says "*Title* is no longer shared with you by *name*" to the people who put it there.

@@ -1,6 +1,8 @@
 """GET/PATCH/DELETE /api/v1/arrangements/{id}."""
 from __future__ import annotations
 
+from sqlalchemy import select
+
 import json
 import uuid
 
@@ -134,7 +136,7 @@ async def test_delete_by_a_partner_is_forbidden_but_admin_may(app_kit):
     assert (await app_kit.client.delete(f"/api/v1/arrangements/{arrangement_id}")).status_code == 204
 
 
-async def test_delete_piece_on_a_setlist_is_409(app_kit):
+async def test_delete_piece_on_a_setlist_marks_its_entry(app_kit):
     user = await _user(app_kit, "member")
     await _login(app_kit, "member")
     arrangement_id = (await _upload(app_kit))["arrangement"]["id"]
@@ -145,5 +147,7 @@ async def test_delete_piece_on_a_setlist_is_409(app_kit):
         s.add(SetlistItem(setlist_id=setlist.id, arrangement_id=uuid.UUID(arrangement_id), position=1))
         await s.commit()
     r = await app_kit.client.delete(f"/api/v1/arrangements/{arrangement_id}")
-    assert r.status_code == 409
-    assert r.json()["detail"] == "on_a_setlist"
+    assert r.status_code == 204
+    async with app_kit.sessionmaker() as s:
+        item = (await s.execute(select(SetlistItem))).scalar_one()
+        assert (item.arrangement_id, item.title_snapshot, item.deleted_by) == (None, "Trio", user.id)

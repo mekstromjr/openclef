@@ -27,7 +27,7 @@ When a piece has several parts, each row has an **Opens** menu. The setlist open
 
 ## Playing a setlist
 
-Choose **Play** on a setlist, or the play arrow on a row to start from that piece.
+Choose **Play** on a setlist, or the play arrow on a row to start from that piece. Entries you can't open are skipped.
 
 - Turn pages as usual: tap the right side, swipe, or press Space, an arrow key or Page Down.
 - On the last page a banner shows what comes next. Turning once more opens the next piece at page 1.
@@ -39,7 +39,18 @@ The address bar records where you are, so reloading the page, or opening the sam
 
 ## Deleting
 
-Deleting a setlist never deletes the pieces in it. A piece that is on a setlist can't be deleted from the library until it has been removed from every setlist; the piece's page lists which setlists it is on.
+Deleting a setlist never deletes the pieces in it.
+
+A piece can be deleted from the library while it is on setlists. Its entry stays in each one as "*Title* was deleted by *name*", so the gap in the running order is visible. Before you delete, the piece's page asks for confirmation and says how many setlists it is on.
+
+## Pieces you can't open
+
+An entry can stay on a setlist after you lose the piece:
+
+- **Deleted:** "*Title* was deleted by *name*".
+- **No longer shared:** "*Title* is no longer shared with you by *name*", when the piece's owner stops sharing it. If they share it again, the entry works again.
+
+You see the title only if you could see the piece before. Anyone else sees "A piece that isn't shared with you" in its place. **Play** skips all of these entries. The setlist's owner can move them or remove them with ✕, and saving the order keeps them as they are.
 
 ## When two people edit at once
 

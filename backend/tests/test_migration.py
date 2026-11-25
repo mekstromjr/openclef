@@ -166,3 +166,55 @@ def test_sharing_migration_keeps_existing_rows(fresh_database_url):
         assert conn.execute(text("SELECT created_by FROM arrangements")).scalar_one() == user_id
     command.downgrade(cfg, "base")
     eng.dispose()
+
+
+def test_entry_ids_migration_backfills_and_downgrades(fresh_database_url):
+    """0005 gives existing entries ids; going back drops entries for deleted
+    pieces and closes the gaps they leave in the running order."""
+    cfg = Config(str(_ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", fresh_database_url)
+    command.upgrade(cfg, "0004_sharing")
+
+    eng = create_engine(fresh_database_url)
+    user_id, arrangement_id, setlist_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, username, role) VALUES (:id, 'owner', 'user')"), {"id": user_id})
+        conn.execute(
+            text("INSERT INTO arrangements (id, title, owner_id) VALUES (:id, 'Trio', :owner)"),
+            {"id": arrangement_id, "owner": user_id},
+        )
+        conn.execute(
+            text("INSERT INTO setlists (id, name, owner_id) VALUES (:id, 'Recital', :owner)"),
+            {"id": setlist_id, "owner": user_id},
+        )
+        for position in range(3):
+            conn.execute(
+                text("INSERT INTO setlist_items (setlist_id, position, arrangement_id) VALUES (:s, :p, :a)"),
+                {"s": setlist_id, "p": position, "a": arrangement_id},
+            )
+
+    command.upgrade(cfg, "head")
+    with eng.begin() as conn:
+        ids = conn.execute(text("SELECT id FROM setlist_items")).scalars().all()
+        assert len(set(ids)) == 3 and None not in ids
+        # An entry needs a piece or a deletion record.
+        failed = False
+        try:
+            with conn.begin_nested():
+                conn.execute(text("UPDATE setlist_items SET arrangement_id = NULL WHERE position = 1"))
+        except Exception:  # noqa: BLE001 - the CHECK constraint
+            failed = True
+        assert failed
+        conn.execute(
+            text(
+                "UPDATE setlist_items SET arrangement_id = NULL, title_snapshot = 'Trio', "
+                "deleted_at = now() WHERE position = 1"
+            )
+        )
+
+    command.downgrade(cfg, "0004_sharing")
+    with eng.connect() as conn:
+        positions = conn.execute(text("SELECT position FROM setlist_items ORDER BY position")).scalars().all()
+        assert positions == [0, 1]
+    command.downgrade(cfg, "base")
+    eng.dispose()

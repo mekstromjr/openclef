@@ -3,27 +3,28 @@
 Who sees a setlist, and which of its pieces, is decided in
 openclef.services.access. Only its owner or an admin can change it for now;
 contributor permission comes with openclef#64. An entry whose piece the
-viewer can't see comes back redacted (`available: false`).
+viewer can't open comes back redacted (`available: false`), saying why only
+to someone who saw the piece before (see `_may_know`).
 
 Every change takes a row lock on the setlist (SELECT ... FOR UPDATE), so
 concurrent saves and appends are serialized. Clients may send the
 `updated_at` they loaded as `expected_updated_at`; a stale value gets 409
 instead of silently overwriting an edit made in another tab or device.
 
-Items are keyed by (setlist_id, position). Saving a new order replaces the
-item rows in one transaction rather than renumbering them in place, which
-would collide on the primary key mid-update.
+Items are keyed by (setlist_id, position) and carry a stable `id`. Saving a
+new order sends existing entries back by id, so entries the editor can't
+see survive it unchanged, and replaces the rows in one transaction rather
+than renumbering them in place, which would collide on the primary key.
 """
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete as sql_delete
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,7 @@ from openclef.schemas import (
     SetlistCreate,
     SetlistDetail,
     SetlistEntry,
+    SetlistItemKeep,
     SetlistItemsReplace,
     SetlistItemWrite,
     SetlistSummary,
@@ -95,13 +97,29 @@ async def _owner_names(db: AsyncSession, owner_ids: set[uuid.UUID]) -> dict[uuid
     return {user_id: username for user_id, username in rows}
 
 
+def _may_know(item: SetlistItem, setlist: Setlist, user: User) -> bool:
+    """Whether `user` may be told what an entry they can't open was.
+
+    Only people who could see the piece before: the setlist's owner, whoever
+    added it, and, for a deleted piece, its owner, whoever deleted it, and
+    the whole audience if it had reached them (its owner added it, see
+    services.access). Anyone else learns nothing beyond the position."""
+    if user.role == UserRole.ADMIN or user.id in (setlist.owner_id, item.added_by):
+        return True
+    if item.deleted_at is None:
+        return False
+    return user.id in (item.piece_owner_id, item.deleted_by) or (
+        item.added_by is not None and item.added_by == item.piece_owner_id
+    )
+
+
 async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDetail:
     items = (
         await db.execute(
             select(SetlistItem).where(SetlistItem.setlist_id == setlist.id).order_by(SetlistItem.position)
         )
     ).scalars().all()
-    arrangement_ids = {item.arrangement_id for item in items}
+    arrangement_ids = {item.arrangement_id for item in items if item.arrangement_id is not None}
 
     # Only the pieces this viewer may see; the rest come back redacted.
     arrangements: dict[uuid.UUID, Arrangement] = {}
@@ -122,19 +140,52 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
         ).scalars():
             parts_by_arrangement.setdefault(part.arrangement_id, []).append(part)
 
+    # Pieces still there but no longer shared with this viewer: read the
+    # title and owner only for entries the viewer may be told about.
+    told = {
+        item.arrangement_id
+        for item in items
+        if item.arrangement_id is not None
+        and item.arrangement_id not in arrangements
+        and _may_know(item, setlist, user)
+    }
+    unshared: dict[uuid.UUID, tuple[str, uuid.UUID]] = {}
+    if told:
+        rows = await db.execute(
+            select(Arrangement.id, Arrangement.title, Arrangement.owner_id).where(Arrangement.id.in_(told))
+        )
+        unshared = {arrangement_id: (title, owner_id) for arrangement_id, title, owner_id in rows}
+
+    names = await _owner_names(
+        db,
+        {setlist.owner_id}
+        | {owner_id for _, owner_id in unshared.values()}
+        | {item.deleted_by for item in items if item.deleted_by is not None and _may_know(item, setlist, user)},
+    )
+
     entries = []
     for item in items:
-        arrangement = arrangements.get(item.arrangement_id)
+        arrangement = arrangements.get(item.arrangement_id) if item.arrangement_id else None
         if arrangement is None:
-            entries.append(SetlistEntry(position=item.position, available=False))
+            entry = SetlistEntry(id=item.id, position=item.position, available=False)
+            if item.deleted_at is not None and _may_know(item, setlist, user):
+                entry.removed = "deleted"
+                entry.title = item.title_snapshot
+                entry.removed_by = names.get(item.deleted_by) if item.deleted_by else None
+            elif item.arrangement_id in unshared:
+                entry.removed = "unshared"
+                entry.title, owner_id = unshared[item.arrangement_id]
+                entry.removed_by = names.get(owner_id)
+            entries.append(entry)
             continue
-        parts = parts_by_arrangement.get(item.arrangement_id, [])
+        parts = parts_by_arrangement.get(arrangement.id, [])
         chosen = next((part for part in parts if part.id == item.part_id), None)
         # A chosen part that was deleted is SET NULL by the FK, so this only
         # falls back to the cover when no part was chosen.
         effective = chosen or (parts[0] if parts else None)
         entries.append(
             SetlistEntry(
+                id=item.id,
                 position=item.position,
                 arrangement_id=arrangement.id,
                 title=arrangement.title,
@@ -148,12 +199,11 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
             )
         )
 
-    owners = await _owner_names(db, {setlist.owner_id})
     return SetlistDetail(
         id=setlist.id,
         name=setlist.name,
         owner_id=setlist.owner_id,
-        owner_username=owners.get(setlist.owner_id, ""),
+        owner_username=names.get(setlist.owner_id, ""),
         item_count=len(entries),
         created_at=setlist.created_at,
         updated_at=setlist.updated_at,
@@ -274,49 +324,75 @@ async def replace_items(
 ) -> SetlistDetail:
     """Save the whole running order. The same piece may appear more than once.
 
-    Each kept piece keeps its `added_by` (it decides who the piece reaches
-    through a shared setlist); new ones are credited to the editor."""
+    Existing entries come back by id and keep everything but their position
+    (and, on an entry the editor can see, the part): who added a piece
+    decides who it reaches through a shared setlist, and an entry the editor
+    can't see must survive untouched. New pieces are credited to the editor.
+    Entries left out are removed."""
     setlist = await _get_for_change(db, setlist_id, user, payload.expected_updated_at)
-    current = (
-        await db.execute(
-            select(SetlistItem.arrangement_id, SetlistItem.added_by)
-            .where(SetlistItem.setlist_id == setlist_id)
-            .order_by(SetlistItem.position)
-        )
-    ).all()
-    visible = set(
-        (
-            await db.execute(
-                select(Arrangement.id).where(
-                    Arrangement.id.in_({arrangement_id for arrangement_id, _ in current}),
-                    visible_arrangements(user),
+    current = {
+        row["id"]: dict(row)
+        for row in (
+            await db.execute(select(SetlistItem.__table__).where(SetlistItem.setlist_id == setlist_id))
+        ).mappings()
+    }
+    kept = [entry for entry in payload.entries if isinstance(entry, SetlistItemKeep)]
+    if any(entry.id not in current for entry in kept):
+        raise HTTPException(status_code=422, detail="item_not_found")
+    if len({entry.id for entry in kept}) != len(kept):
+        raise HTTPException(status_code=422, detail="duplicate_item")
+
+    # A part change is only allowed where the editor can see the piece.
+    repartitioned = [entry for entry in kept if "part_id" in entry.model_fields_set]
+    if repartitioned:
+        pieces = {current[entry.id]["arrangement_id"] for entry in repartitioned}
+        visible = set(
+            (
+                await db.execute(
+                    select(Arrangement.id).where(
+                        Arrangement.id.in_({piece for piece in pieces if piece is not None}),
+                        visible_arrangements(user),
+                    )
                 )
-            )
-        ).scalars()
-    )
-    if any(arrangement_id not in visible for arrangement_id, _ in current):
-        # The editor can't send back entries it can't see, so saving would
-        # silently drop them. Refuse until openclef#64 handles them.
-        raise HTTPException(status_code=409, detail="setlist_has_hidden_items")
-    await _check_items(db, payload.items, user)
-    adders: dict[uuid.UUID, list[uuid.UUID | None]] = defaultdict(list)
-    for arrangement_id, added_by in current:
-        adders[arrangement_id].append(added_by)
-
-    def credit(arrangement_id: uuid.UUID) -> uuid.UUID | None:
-        return adders[arrangement_id].pop(0) if adders[arrangement_id] else user.id
-
-    await db.execute(sql_delete(SetlistItem).where(SetlistItem.setlist_id == setlist_id))
-    db.add_all(
-        SetlistItem(
-            setlist_id=setlist_id,
-            position=position,
-            arrangement_id=item.arrangement_id,
-            part_id=item.part_id,
-            added_by=credit(item.arrangement_id),
+            ).scalars()
         )
-        for position, item in enumerate(payload.items)
+        if any(piece not in visible for piece in pieces):
+            raise HTTPException(status_code=422, detail="item_hidden")
+    new = [entry for entry in payload.entries if isinstance(entry, SetlistItemWrite)]
+    await _check_items(
+        db,
+        new
+        + [
+            SetlistItemWrite(arrangement_id=current[entry.id]["arrangement_id"], part_id=entry.part_id)
+            for entry in repartitioned
+        ],
+        user,
     )
+
+    rows = []
+    for position, entry in enumerate(payload.entries):
+        if isinstance(entry, SetlistItemKeep):
+            row = {**current[entry.id], "position": position}
+            if "part_id" in entry.model_fields_set:
+                row["part_id"] = entry.part_id
+        else:
+            row = {
+                "id": uuid.uuid4(),
+                "setlist_id": setlist_id,
+                "position": position,
+                "arrangement_id": entry.arrangement_id,
+                "part_id": entry.part_id,
+                "added_by": user.id,
+                # One bulk insert needs the same keys on every row.
+                "title_snapshot": None,
+                "deleted_by": None,
+                "deleted_at": None,
+                "piece_owner_id": None,
+            }
+        rows.append(row)
+    await db.execute(sql_delete(SetlistItem).where(SetlistItem.setlist_id == setlist_id))
+    if rows:
+        await db.execute(insert(SetlistItem.__table__), rows)
     await _touch(db, setlist)
     await _commit(db)
     return await _reload(db, setlist_id, user)

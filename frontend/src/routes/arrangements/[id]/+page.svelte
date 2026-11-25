@@ -115,30 +115,24 @@
 
   async function deleteArrangement() {
     if (!arrangement) return;
-    if (!confirm(`Delete "${arrangement.title}" and all its parts? This can't be undone.`)) return;
+    if (!confirm(deleteQuestion())) return;
     try {
       await api.delete(`/api/v1/arrangements/${arrangement.id}`);
       await goto('/');
-    } catch (e) {
-      saveError =
-        e instanceof ApiError && e.status === 409 ? onSetlistsMessage() : 'Deleting failed.';
+    } catch {
+      saveError = 'Deleting failed.';
     }
   }
 
-  // Name the setlists you can see; count the ones you can't (a partner's
-  // setlist holding your piece), so the refusal is never a dead end.
-  function onSetlistsMessage(): string {
+  // A piece on setlists can still be deleted: each entry stays, saying it
+  // was deleted. Count setlists the viewer can't see too (a partner's
+  // setlist holding your piece), without naming them.
+  function deleteQuestion(): string {
     if (!arrangement) return '';
-    const named = arrangement.setlists.map((s) => `"${s.name}"`).join(', ');
-    const hidden = arrangement.hidden_setlist_count;
-    const hiddenText = hidden
-      ? `${hidden} ${hidden === 1 ? 'setlist' : 'setlists'} that ${hidden === 1 ? "isn't" : "aren't"} shared with you`
-      : '';
-    if (!named) return `This piece is on ${hiddenText}. Ask whoever owns ${hidden === 1 ? 'it' : 'them'} to remove it first.`;
-    const where = `${arrangement.setlists.length === 1 ? 'the setlist' : 'the setlists'} ${named}`;
-    return hidden
-      ? `This piece is on ${where}, and on ${hiddenText}. Remove it from all of them first.`
-      : `This piece is on ${where}. Remove it there first.`;
+    const question = `Delete "${arrangement.title}" and all its parts? This can't be undone.`;
+    const count = arrangement.setlists.length + arrangement.hidden_setlist_count;
+    if (!count) return question;
+    return `${question}\n\nIt's on ${count} ${count === 1 ? 'setlist' : 'setlists'}, which will show it as deleted.`;
   }
 
   async function removePart(part: Part) {

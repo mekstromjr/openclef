@@ -6,22 +6,18 @@
     SETLIST_MAX_ITEMS,
     api,
     setlistErrorMessage,
-    withoutHidden,
     type ArrangementDetail,
     type ArrangementSummary,
     type Part,
-    type SetlistDetail,
-    type SetlistEntry
+    type SetlistDetail
   } from '$lib/api';
   import AddPiecesDialog from '$lib/components/setlists/AddPiecesDialog.svelte';
-  import { moveItem, orderChanged, removeItem, toWrite } from '$lib/setlists/order';
+  import { moveItem, orderChanged, playPosition, removeItem, toWrite, type EditableEntry } from '$lib/setlists/order';
 
   const id = $derived(page.params.id as string);
 
   let setlist = $state<SetlistDetail | null>(null);
-  let entries = $state<SetlistEntry[]>([]);
-  /** Entries on this setlist whose piece isn't shared with this viewer. */
-  let hidden = $state(0);
+  let entries = $state<EditableEntry[]>([]);
   let loadError = $state<string | null>(null);
   let saveError = $state<string | null>(null);
   let saving = $state(false);
@@ -39,16 +35,26 @@
 
   async function load(setlistId: string) {
     try {
-      const shown = withoutHidden(await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`));
-      const loaded = shown.setlist;
-      hidden = shown.hidden;
+      const loaded = await api.get<SetlistDetail>(`/api/v1/setlists/${setlistId}`);
       setlist = loaded;
       entries = loaded.items.map((item) => ({ ...item }));
       loadError = null;
-      if (loaded.can_edit) void loadParts(loaded.items.map((item) => item.arrangement_id));
+      if (loaded.can_edit) void loadParts(openable(loaded.items));
     } catch (e) {
       loadError = e instanceof ApiError && e.status === 404 ? "This setlist doesn't exist or isn't shared with you." : 'Could not load this setlist.';
     }
+  }
+
+  /** The pieces behind the entries this viewer can open. */
+  function openable(items: readonly EditableEntry[]): string[] {
+    return items.flatMap((item) => (item.available && item.arrangement_id ? [item.arrangement_id] : []));
+  }
+
+  /** What an entry that can't be opened says, to someone allowed to know. */
+  function removedText(entry: EditableEntry): string {
+    if (entry.removed === 'deleted')
+      return entry.removed_by ? `was deleted by ${entry.removed_by}` : 'was deleted';
+    return `is no longer shared with you${entry.removed_by ? ` by ${entry.removed_by}` : ''}`;
   }
 
   async function loadParts(arrangementIds: string[]) {
@@ -78,7 +84,7 @@
   }
 
   function choosePart(index: number, partId: string) {
-    const parts = partsByArrangement[entries[index].arrangement_id] ?? [];
+    const parts = partsByArrangement[entries[index].arrangement_id ?? ''] ?? [];
     const part = parts.find((p) => p.id === partId) ?? null;
     entries[index] = {
       ...entries[index],
@@ -93,9 +99,12 @@
   function addPieces(pieces: ArrangementSummary[]) {
     const room = SETLIST_MAX_ITEMS - entries.length;
     const added = pieces.slice(0, room).map(
-      (piece, offset): SetlistEntry => ({
+      (piece, offset): EditableEntry => ({
+        id: null,
         position: entries.length + offset,
         available: true,
+        removed: null,
+        removed_by: null,
         arrangement_id: piece.id,
         title: piece.title,
         subtitle: piece.subtitle,
@@ -108,7 +117,7 @@
       })
     );
     entries = [...entries, ...added];
-    void loadParts(added.map((entry) => entry.arrangement_id));
+    void loadParts(openable(added));
     if (pieces.length > room) saveError = `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;
   }
 
@@ -118,11 +127,11 @@
     saveError = null;
     try {
       const saved = await api.put<SetlistDetail>(`/api/v1/setlists/${setlist.id}/items`, {
-        items: toWrite(entries),
+        entries: toWrite(entries),
         expected_updated_at: setlist.updated_at
       });
-      setlist = withoutHidden(saved).setlist;
-      entries = setlist.items.map((item) => ({ ...item }));
+      setlist = saved;
+      entries = saved.items.map((item) => ({ ...item }));
     } catch (e) {
       saveError = setlistErrorMessage(e);
     } finally {
@@ -191,7 +200,7 @@
         </div>
       {/if}
       <div class="flex flex-wrap gap-2 text-sm">
-        {#if entries.length && !dirty}
+        {#if entries.some((entry) => entry.available) && !dirty}
           <a href="/setlists/{setlist.id}/play" class="px-4 py-1.5 rounded bg-clef-claret text-clef-ivory font-medium hover:bg-clef-claret/90">Play</a>
         {/if}
         {#if setlist.can_edit && !renaming}
@@ -211,11 +220,6 @@
       </div>
     {/if}
     {#if saveError}<p class="text-sm text-clef-claret">{saveError}</p>{/if}
-    {#if hidden > 0}
-      <p class="text-sm text-clef-stone-300/80">
-        {hidden} {hidden === 1 ? "piece on this setlist isn't" : "pieces on this setlist aren't"} shared with you, so {hidden === 1 ? "it's" : "they're"} not shown.
-      </p>
-    {/if}
 
     {#if entries.length === 0}
       <div class="rounded-lg border border-dashed border-clef-graphite-500 px-6 py-10 text-center text-sm text-clef-stone-300/80 space-y-2">
@@ -226,8 +230,9 @@
       </div>
     {:else}
       <ol class="space-y-2">
-        {#each entries as entry, index (`${index}:${entry.arrangement_id}`)}
-          {@const parts = partsByArrangement[entry.arrangement_id] ?? []}
+        {#each entries as entry, index (`${index}:${entry.id ?? entry.arrangement_id}`)}
+          {@const parts = partsByArrangement[entry.arrangement_id ?? ''] ?? []}
+          {@const label = entry.title ?? 'a piece not shared with you'}
           <li
             draggable={setlist.can_edit && dragArmed === index}
             ondragstart={(event) => {
@@ -261,6 +266,15 @@
               {/if}
             </div>
             <div class="min-w-0 flex-1">
+              {#if !entry.available}
+                <p class="line-clamp-2 break-words text-sm leading-snug text-clef-stone-300/80" data-testid="unavailable-entry">
+                  {#if entry.removed}
+                    <em class="text-clef-ivory/80">{entry.title}</em> {removedText(entry)}
+                  {:else}
+                    A piece that isn't shared with you
+                  {/if}
+                </p>
+              {:else}
               <a href="/arrangements/{entry.arrangement_id}" class="block line-clamp-2 break-words font-medium leading-snug hover:text-clef-claret">{entry.title}</a>
               <p class="truncate text-xs text-clef-stone-300/70">{entry.composer.join(' · ')}</p>
               {#if setlist.can_edit && parts.length > 1}
@@ -277,15 +291,16 @@
               {:else if entry.part_label}
                 <p class="text-xs text-clef-stone-300/70">{entry.part_label}</p>
               {/if}
+              {/if}
             </div>
-            {#if !dirty}
-              <a href="/setlists/{setlist.id}/play?at={index + 1}" class="shrink-0 rounded px-2 py-1 text-xs text-clef-stone-300 hover:text-clef-ivory" aria-label="Play from {entry.title}">▶</a>
+            {#if !dirty && entry.available}
+              <a href="/setlists/{setlist.id}/play?at={playPosition(entries, index)}" class="shrink-0 rounded px-2 py-1 text-xs text-clef-stone-300 hover:text-clef-ivory" aria-label="Play from {entry.title}">▶</a>
             {/if}
             {#if setlist.can_edit}
               <div class="flex shrink-0 items-center">
-                <button type="button" onclick={() => move(index, index - 1)} disabled={index === 0} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {entry.title} up">↑</button>
-                <button type="button" onclick={() => move(index, index + 1)} disabled={index === entries.length - 1} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {entry.title} down">↓</button>
-                <button type="button" onclick={() => remove(index)} class="rounded px-2 py-1 text-clef-stone-300/70 hover:text-clef-claret" aria-label="Remove {entry.title} from the setlist">✕</button>
+                <button type="button" onclick={() => move(index, index - 1)} disabled={index === 0} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {label} up">↑</button>
+                <button type="button" onclick={() => move(index, index + 1)} disabled={index === entries.length - 1} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {label} down">↓</button>
+                <button type="button" onclick={() => remove(index)} class="rounded px-2 py-1 text-clef-stone-300/70 hover:text-clef-claret" aria-label="Remove {label} from the setlist">✕</button>
               </div>
             {/if}
           </li>

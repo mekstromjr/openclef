@@ -7,6 +7,7 @@ thumbnail bytes, so a single endpoint that forgets the filter fails here.
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -216,12 +217,12 @@ async def test_writes_follow_the_access_rule(app_kit, name, relate, sees_piece, 
     rename = await client.patch(f"/api/v1/setlists/{world.setlist}", json={"name": "Renamed"})
     assert rename.status_code == (200 if manages else 403 if sees_setlist else 404), rename.text
 
-    # Deleting is for the owner or an admin. The piece is on a setlist, so
-    # reaching the 409 proves the permission check passed.
-    delete_piece = await client.delete(f"/api/v1/arrangements/{world.piece}")
-    assert delete_piece.status_code == (409 if manages else 403 if sees_piece else 404), delete_piece.text
+    # Deleting is for the owner or an admin, even with the piece on a
+    # setlist: its entry stays there, marked deleted (openclef#64).
     delete_part = await client.delete(f"/api/v1/arrangements/{world.piece}/parts/{world.part}")
     assert delete_part.status_code == (204 if manages else 403 if sees_piece else 404), delete_part.text
+    delete_piece = await client.delete(f"/api/v1/arrangements/{world.piece}")
+    assert delete_piece.status_code == (204 if manages else 403 if sees_piece else 404), delete_piece.text
 
 
 async def test_a_shared_setlist_passes_on_only_what_each_adder_owns(app_kit):
@@ -283,11 +284,14 @@ async def test_reordering_keeps_who_added_each_piece(app_kit):
         await s.commit()
 
     await _login(kit, "owner")
+    loaded = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+    own_entry, contributed_entry = (entry["id"] for entry in loaded)
     r = await kit.client.put(
         f"/api/v1/setlists/{setlist}/items",
-        json={"items": [{"arrangement_id": contributed}, {"arrangement_id": own}, {"arrangement_id": own}]},
+        json={"entries": [{"id": contributed_entry}, {"id": own_entry}, {"arrangement_id": own}]},
     )
     assert r.status_code == 200, r.text
+    assert [entry["id"] for entry in r.json()["items"][:2]] == [contributed_entry, own_entry]
     async with kit.sessionmaker() as s:
         rows = (
             await s.execute(
@@ -302,10 +306,65 @@ async def test_reordering_keeps_who_added_each_piece(app_kit):
         (own, owner.id),  # a new copy is credited to the editor
     ]
 
+    # The old body shape (every entry as a new piece) is refused rather than
+    # re-crediting every piece to the editor.
+    r = await kit.client.put(
+        f"/api/v1/setlists/{setlist}/items", json={"items": [{"arrangement_id": contributed}]}
+    )
+    assert r.status_code == 422
 
-async def test_saving_a_setlist_with_hidden_pieces_is_refused(app_kit):
-    """Until openclef#64, the editor can't send back entries it can't see,
-    so the save is refused instead of silently dropping them."""
+
+async def test_entries_the_editor_cant_see_survive_a_save(app_kit):
+    """The editor sends hidden entries back by id; they keep their piece and
+    adder, can be moved or removed, but their part can't be changed."""
+    kit = app_kit
+    lender = await _user(kit, "lender")
+    await _login(kit, "lender")
+    lent, lent_part = await _upload(kit, "Lent piece")
+    owner = await _user(kit, "owner")
+    await share_library(kit, lender.id, owner.id)
+    await _login(kit, "owner")
+    own, _ = await _upload(kit, "Own piece")
+    setlist = await _setlist(kit, "Recital", lent, own)
+
+    async with kit.sessionmaker() as s:  # the lender stops sharing
+        partnership = await s.get(Partnership, (lender.id, owner.id))
+        await s.delete(partnership)
+        await s.commit()
+
+    loaded = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+    hidden, mine = loaded
+    # The owner put it there, so they're told what it was and who stopped sharing.
+    assert (hidden["available"], hidden["removed"], hidden["title"], hidden["removed_by"]) == (
+        False, "unshared", "Lent piece", "lender",
+    )
+    assert hidden["arrangement_id"] is None and hidden["effective_part_id"] is None
+
+    url = f"/api/v1/setlists/{setlist}/items"
+    r = await kit.client.put(url, json={"entries": [{"id": hidden["id"], "part_id": lent_part}]})
+    assert (r.status_code, r.json()["detail"]) == (422, "item_hidden")
+    r = await kit.client.put(url, json={"entries": [{"id": mine["id"]}, {"id": hidden["id"]}]})
+    assert r.status_code == 200, r.text
+    assert [entry["id"] for entry in r.json()["items"]] == [mine["id"], hidden["id"]]
+
+    # Sharing again brings it back as it was.
+    await share_library(kit, lender.id, owner.id)
+    items = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+    assert [(entry["title"], entry["available"]) for entry in items] == [("Own piece", True), ("Lent piece", True)]
+
+    # An id from elsewhere, or one sent twice, is refused.
+    r = await kit.client.put(url, json={"entries": [{"id": str(uuid.uuid4())}]})
+    assert (r.status_code, r.json()["detail"]) == (422, "item_not_found")
+    r = await kit.client.put(url, json={"entries": [{"id": mine["id"]}, {"id": mine["id"]}]})
+    assert (r.status_code, r.json()["detail"]) == (422, "duplicate_item")
+
+    # Leaving it out removes it.
+    r = await kit.client.put(url, json={"entries": [{"id": mine["id"]}]})
+    assert [entry["title"] for entry in r.json()["items"]] == ["Own piece"]
+
+
+async def test_an_unshared_entry_tells_only_who_saw_it(app_kit):
+    """Someone who never saw the piece learns nothing but its position."""
     kit = app_kit
     lender = await _user(kit, "lender")
     await _login(kit, "lender")
@@ -314,13 +373,11 @@ async def test_saving_a_setlist_with_hidden_pieces_is_refused(app_kit):
     await share_library(kit, lender.id, owner.id)
     await _login(kit, "owner")
     setlist = await _setlist(kit, "Recital", lent)
+    audience = await _user(kit, "audience")
+    await share_setlist(kit, setlist, user_id=audience.id)
 
-    async with kit.sessionmaker() as s:  # the lender stops sharing
-        partnership = await s.get(Partnership, (lender.id, owner.id))
-        await s.delete(partnership)
-        await s.commit()
-
-    loaded = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()
-    assert [item["available"] for item in loaded["items"]] == [False]
-    r = await kit.client.put(f"/api/v1/setlists/{setlist}/items", json={"items": []})
-    assert (r.status_code, r.json()["detail"]) == (409, "setlist_has_hidden_items")
+    await _login(kit, "audience")
+    [entry] = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+    assert entry["available"] is False
+    assert (entry["removed"], entry["title"], entry["removed_by"]) == (None, None, None)
+    assert "Lent piece" not in (await kit.client.get(f"/api/v1/setlists/{setlist}")).text
