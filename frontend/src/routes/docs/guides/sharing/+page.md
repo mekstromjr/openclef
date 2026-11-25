@@ -24,7 +24,7 @@ Pieces someone else shares with you appear in your library with a small people i
 
 Under **Shared with me** in Settings:
 
-- **Show in my library** decides whether that person's music appears in your main library. Turning it off doesn't remove anything: it stays on their page and in your setlists.
+- **Show in my library** decides whether that person's music appears in your main library. Turning it off doesn't remove anything: it stays on their page and in your setlists. It also leaves their music out of a setlist's **Add pieces** search; to add one of their pieces, open it from their page and choose **Add to setlist**.
 - The person's name opens their page: everything they share with you, with the same search and filters as your library.
 
 ## Only my music

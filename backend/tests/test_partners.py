@@ -223,3 +223,11 @@ async def test_detail_counts_setlists_the_viewer_cant_see(app_kit):
     assert body["hidden_setlist_count"] == 1
     assert body["owner_username"] == "alice"
     assert "Bob's recital" not in r.text and bobs_setlist not in r.text
+
+    # Only the owner (who can delete) gets the count: a partner viewing the
+    # piece must not learn about other people's private setlists.
+    carol = await _user(app_kit, "carol")
+    await _partner(app_kit, carol.id)
+    await _login(app_kit, "carol")
+    r = await app_kit.client.get(f"/api/v1/arrangements/{piece}")
+    assert r.json()["hidden_setlist_count"] == 0

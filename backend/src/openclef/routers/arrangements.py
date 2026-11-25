@@ -396,9 +396,14 @@ async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> Arr
             .order_by(Setlist.name, Setlist.id)
         )
     ).all()
-    holding_total = (
-        await db.execute(select(func.count()).select_from(Setlist).where(holding))
-    ).scalar_one()
+    # Only someone who can delete needs the hidden count (to explain a
+    # refused delete). Anyone else would learn about others' private setlists.
+    hidden_setlist_count = 0
+    if can_manage(arrangement.owner_id, user):
+        holding_total = (
+            await db.execute(select(func.count()).select_from(Setlist).where(holding))
+        ).scalar_one()
+        hidden_setlist_count = holding_total - len(setlists)
     owner_username = (
         await db.execute(select(User.username).where(User.id == arrangement.owner_id))
     ).scalar_one_or_none()
@@ -407,7 +412,7 @@ async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> Arr
         parts=[PartRead.model_validate(part) for part in parts],
         tags=list(tags),
         setlists=[SetlistRef(id=setlist_id, name=name) for setlist_id, name in setlists],
-        hidden_setlist_count=holding_total - len(setlists),
+        hidden_setlist_count=hidden_setlist_count,
         owner_username=owner_username,
     )
 
