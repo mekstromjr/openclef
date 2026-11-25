@@ -231,6 +231,10 @@ class ArrangementDetail(ArrangementRead):
     tags: list[str]
     # Setlists this piece is on (a piece on a setlist can't be deleted).
     setlists: list["SetlistRef"] = []
+    # Setlists the viewer can't see that still hold the piece, so a refused
+    # delete can say why. A count only: names would leak (openclef#62).
+    hidden_setlist_count: int = 0
+    owner_username: str | None = None
 
 
 class ArrangementSummary(BaseModel):
@@ -250,6 +254,9 @@ class ArrangementSummary(BaseModel):
     # First-uploaded part: its PDF opens from the card, its thumbnail is the cover.
     cover_part_id: uuid.UUID | None
     cover_thumbnail_ready: bool
+    # Whose library the piece is in: drives the "Shared by" icon.
+    owner_id: uuid.UUID
+    owner_username: str
 
 
 class FacetCount(BaseModel):
@@ -423,6 +430,40 @@ class EnrichmentJobRead(BaseModel):
     attempts: int
     created_at: datetime
     completed_at: datetime | None
+
+
+# --- Sharing: people and partners (openclef#62) -------------------------
+
+
+class Person(BaseModel):
+    """Another account, as anyone signed in may see it: no email or role."""
+
+    id: uuid.UUID
+    username: str
+
+
+class IncomingPartner(Person):
+    # The receiver's choice: list this person's pieces in my library.
+    show_in_library: bool
+
+
+class Partners(BaseModel):
+    # People I share my library with.
+    outgoing: list[Person]
+    # People who share their library with me.
+    incoming: list[IncomingPartner]
+
+
+class PartnerCreate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    user_id: _JsonUuid
+
+
+class IncomingPartnerUpdate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    show_in_library: bool
 
 
 # ArrangementDetail refers to SetlistRef, defined later in this module.

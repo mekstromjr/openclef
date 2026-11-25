@@ -41,7 +41,7 @@ from openclef.schemas import (
     SetlistRef,
     UploadResponse,
 )
-from openclef.services.access import can_manage, visible_arrangements, visible_setlists
+from openclef.services.access import can_manage, in_library, visible_arrangements, visible_setlists
 from openclef.services.library_search import LibraryFilters, facet_queries, order_by
 from openclef.services.pdf_meta import InvalidPdfError
 from openclef.services.uploads import (
@@ -136,40 +136,47 @@ async def list_arrangements(
     period: Period | None = None,
     difficulty: Annotated[int | None, Query(ge=1, le=5)] = None,
     tag: str | None = None,
+    scope: Literal["all", "mine"] = "all",
+    shared_by: uuid.UUID | None = None,
     sort: Literal["relevance", "title", "recent"] = "relevance",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
 ) -> ArrangementList:
     """The library: search, filter, and facet counts for the sidebar.
-    Default order is search relevance when searching, newest otherwise."""
+    Default order is search relevance when searching, newest otherwise.
+
+    `scope=mine` lists only the viewer's own pieces; `shared_by` lists what
+    one partner shares with them, even with "Show in my library" off.
+    Facets follow the same listing rule (services.access.in_library)."""
     filters = LibraryFilters(
-        visible=visible_arrangements(user), q=q, instrument=instrument, composer=composer, key=key,
+        visible=in_library(user, scope=scope, shared_by=shared_by), q=q, instrument=instrument, composer=composer, key=key,
         period=period, difficulty=difficulty, tag=tag,
     )
     where = and_(True, *filters.conditions())
     total = (await db.execute(select(func.count()).select_from(Arrangement).where(where))).scalar_one()
     rows = (
         await db.execute(
-            select(Arrangement)
+            select(Arrangement, User.username)
+            .join(User, User.id == Arrangement.owner_id)
             .where(where)
             .order_by(*order_by(filters, sort))
             .limit(page_size)
             .offset((page - 1) * page_size)
         )
-    ).scalars().all()
+    ).all()
 
     parts_by_arrangement: dict[uuid.UUID, list[tuple]] = {}
     if rows:
         part_rows = await db.execute(
             select(Part.arrangement_id, Part.id, Part.thumbnail_storage_key)
-            .where(Part.arrangement_id.in_([row.id for row in rows]))
+            .where(Part.arrangement_id.in_([row.id for row, _ in rows]))
             .order_by(Part.created_at, Part.id)
         )
         for arrangement_id, part_id, thumb in part_rows:
             parts_by_arrangement.setdefault(arrangement_id, []).append((part_id, thumb))
 
     items = []
-    for row in rows:
+    for row, owner_username in rows:
         parts = parts_by_arrangement.get(row.id, [])
         cover = parts[0] if parts else None
         items.append(
@@ -181,6 +188,7 @@ async def list_arrangements(
                 part_count=len(parts),
                 cover_part_id=cover[0] if cover else None,
                 cover_thumbnail_ready=bool(cover and cover[1]),
+                owner_id=row.owner_id, owner_username=owner_username,
             )
         )
 
@@ -378,21 +386,29 @@ async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> Arr
             .order_by(Tag.name)
         )
     ).scalars().all()
+    holding = Setlist.id.in_(
+        select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement.id)
+    )
     setlists = (
         await db.execute(
             select(Setlist.id, Setlist.name)
-            .where(
-                Setlist.id.in_(select(SetlistItem.setlist_id).where(SetlistItem.arrangement_id == arrangement.id)),
-                visible_setlists(user),
-            )
+            .where(holding, visible_setlists(user))
             .order_by(Setlist.name, Setlist.id)
         )
     ).all()
+    holding_total = (
+        await db.execute(select(func.count()).select_from(Setlist).where(holding))
+    ).scalar_one()
+    owner_username = (
+        await db.execute(select(User.username).where(User.id == arrangement.owner_id))
+    ).scalar_one_or_none()
     return ArrangementDetail(
         **ArrangementRead.model_validate(arrangement).model_dump(),
         parts=[PartRead.model_validate(part) for part in parts],
         tags=list(tags),
         setlists=[SetlistRef(id=setlist_id, name=name) for setlist_id, name in setlists],
+        hidden_setlist_count=holding_total - len(setlists),
+        owner_username=owner_username,
     )
 
 

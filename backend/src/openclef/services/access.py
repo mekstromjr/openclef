@@ -21,10 +21,19 @@ A user can see an **arrangement** (and so its parts, files and thumbnails) if:
 
 Partnerships don't chain: only the direct sharer's library counts.
 `show_in_library` is the partner's display preference, not an access rule.
+
+What the **library page lists** is narrower than what a user can open
+(`in_library`, openclef#62): their own pieces, pieces shared with a group
+they're in, and their partners' pieces, minus partners they turned "Show
+in my library" off for. Pieces reached only through a setlist open from
+that setlist but aren't listed, and an admin's library lists the same as
+anyone's (the admin override applies to opening, not listing).
 """
 from __future__ import annotations
 
-from sqlalchemy import ColumnElement, Select, or_, select, true
+import uuid
+
+from sqlalchemy import ColumnElement, Select, and_, or_, select, true
 
 from openclef.models.enums import UserRole
 from openclef.models.library import Arrangement
@@ -83,9 +92,40 @@ def visible_arrangements(user: User) -> ColumnElement[bool]:
     )
 
 
+def in_library(
+    user: User, *, scope: str = "all", shared_by: uuid.UUID | None = None
+) -> ColumnElement[bool]:
+    """WHERE clause on `Arrangement` for what `user`'s library page lists.
+
+    - `scope="mine"`: only what they own ("Only my music").
+    - `shared_by`: what that one person shares with them, whatever the
+      "Show in my library" toggle says (the per-sharer page).
+    - otherwise: own + group shares + partners shown in the library.
+
+    Always ANDed with `visible_arrangements`, so a listing can never show
+    something the user couldn't open."""
+    if scope == "mine":
+        listed = Arrangement.owner_id == user.id
+    else:
+        partners = select(Partnership.sharer_id).where(Partnership.partner_id == user.id)
+        if shared_by is None:
+            partners = partners.where(Partnership.show_in_library.is_(True))
+        via_group = select(ArrangementShare.arrangement_id).where(
+            ArrangementShare.group_id.in_(_groups_of(user))
+        )
+        listed = or_(
+            Arrangement.owner_id == user.id,
+            Arrangement.owner_id.in_(partners),
+            Arrangement.id.in_(via_group),
+        )
+        if shared_by is not None:
+            listed = and_(listed, Arrangement.owner_id == shared_by)
+    return and_(visible_arrangements(user), listed)
+
+
 def can_manage(owner_id, user: User) -> bool:
     """Delete or share: the owner, or an admin."""
     return owner_id == user.id or user.role == UserRole.ADMIN
 
 
-__all__ = ["can_manage", "visible_arrangements", "visible_setlists"]
+__all__ = ["can_manage", "in_library", "visible_arrangements", "visible_setlists"]

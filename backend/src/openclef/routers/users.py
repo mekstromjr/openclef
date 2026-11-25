@@ -36,17 +36,17 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 # Singleton placeholder user that absorbs ownership of orphaned rows
 # when a real user is deleted. Created on demand.
-_TOMBSTONE_USERNAME = "__deleted__"
+TOMBSTONE_USERNAME = "__deleted__"
 
 
 async def _get_or_create_tombstone(db: AsyncSession) -> User:
     existing = (
-        await db.execute(select(User).where(User.username == _TOMBSTONE_USERNAME))
+        await db.execute(select(User).where(User.username == TOMBSTONE_USERNAME))
     ).scalar_one_or_none()
     if existing is not None:
         return existing
     tombstone = User(
-        username=_TOMBSTONE_USERNAME,
+        username=TOMBSTONE_USERNAME,
         password_hash=None,
         role=UserRole.USER,
     )
@@ -65,7 +65,7 @@ async def list_users(
 ):
     rows = (await db.execute(select(User).order_by(User.username))).scalars().all()
     return [
-        u for u in rows if u.username != _TOMBSTONE_USERNAME
+        u for u in rows if u.username != TOMBSTONE_USERNAME
     ]  # hide the tombstone from admin views
 
 
@@ -80,7 +80,7 @@ async def create_user(
     # then re-hash here so we never store unsalted secrets.
     if body.password_hash is None:
         raise HTTPException(status_code=422, detail="password_hash_required")
-    if body.username == _TOMBSTONE_USERNAME:
+    if body.username == TOMBSTONE_USERNAME:
         raise HTTPException(status_code=409, detail="reserved_username")
 
     user = User(
@@ -115,7 +115,7 @@ async def update_user(
         raise HTTPException(status_code=422, detail="invalid_user_id")
 
     user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
-    if user is None or user.username == _TOMBSTONE_USERNAME:
+    if user is None or user.username == TOMBSTONE_USERNAME:
         raise HTTPException(status_code=404, detail="user_not_found")
 
     if body.email is not None:
@@ -149,7 +149,7 @@ async def delete_user(
         raise HTTPException(status_code=409, detail="cannot_delete_self")
 
     user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
-    if user is None or user.username == _TOMBSTONE_USERNAME:
+    if user is None or user.username == TOMBSTONE_USERNAME:
         raise HTTPException(status_code=404, detail="user_not_found")
 
     tombstone = await _get_or_create_tombstone(db)
