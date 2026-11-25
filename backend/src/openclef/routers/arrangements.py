@@ -27,16 +27,19 @@ from openclef.models.enrichment import EnrichmentJob
 from openclef.models.enums import EnrichmentJobStatus, KeySignature, PartType, Period
 from openclef.models.library import Arrangement, ArrangementTag, Part, Tag
 from openclef.models.setlist import Setlist, SetlistItem
+from openclef.models.sharing import ArrangementShare, Group, GroupMember
 from openclef.models.user import User, UserSettings
 from openclef.routers._deps import get_storage
 from openclef.schemas import (
     ArrangementDetail,
     ArrangementList,
     ArrangementRead,
+    ArrangementSharesUpdate,
     ArrangementSummary,
     ArrangementUpdate,
     FacetCount,
     ArrangementUploadMetadata,
+    GroupRef,
     PartRead,
     SetlistRef,
     UploadResponse,
@@ -138,6 +141,7 @@ async def list_arrangements(
     tag: str | None = None,
     scope: Literal["all", "mine"] = "all",
     shared_by: uuid.UUID | None = None,
+    group: uuid.UUID | None = None,
     sort: Literal["relevance", "title", "recent"] = "relevance",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
@@ -146,10 +150,12 @@ async def list_arrangements(
     Default order is search relevance when searching, newest otherwise.
 
     `scope=mine` lists only the viewer's own pieces; `shared_by` lists what
-    one partner shares with them, even with "Show in my library" off.
+    one partner shares with them, even with "Show in my library" off;
+    `group` lists what is shared with one group the viewer is in.
     Facets follow the same listing rule (services.access.in_library)."""
     filters = LibraryFilters(
-        visible=in_library(user, scope=scope, shared_by=shared_by), q=q, instrument=instrument, composer=composer, key=key,
+        visible=in_library(user, scope=scope, shared_by=shared_by, group=group),
+        q=q, instrument=instrument, composer=composer, key=key,
         period=period, difficulty=difficulty, tag=tag,
     )
     where = and_(True, *filters.conditions())
@@ -407,6 +413,20 @@ async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> Arr
     owner_username = (
         await db.execute(select(User.username).where(User.id == arrangement.owner_id))
     ).scalar_one_or_none()
+    # Owner only, not can_manage: an admin outside a group mustn't learn it exists.
+    groups: list[GroupRef] = []
+    if arrangement.owner_id == user.id:
+        groups = [
+            GroupRef(id=group_id, name=name)
+            for group_id, name in (
+                await db.execute(
+                    select(Group.id, Group.name)
+                    .join(ArrangementShare, ArrangementShare.group_id == Group.id)
+                    .where(ArrangementShare.arrangement_id == arrangement.id)
+                    .order_by(Group.name, Group.id)
+                )
+            ).all()
+        ]
     return ArrangementDetail(
         **ArrangementRead.model_validate(arrangement).model_dump(),
         parts=[PartRead.model_validate(part) for part in parts],
@@ -414,6 +434,7 @@ async def _detail(db: AsyncSession, arrangement: Arrangement, user: User) -> Arr
         setlists=[SetlistRef(id=setlist_id, name=name) for setlist_id, name in setlists],
         hidden_setlist_count=hidden_setlist_count,
         owner_username=owner_username,
+        groups=groups,
     )
 
 
@@ -443,6 +464,42 @@ async def update_arrangement(
         arrangement.field_origins_jsonb = origins
     await db.commit()
     await db.refresh(arrangement)
+    return await _detail(db, arrangement, user)
+
+
+@router.put("/{arrangement_id}/shares", response_model=ArrangementDetail)
+async def set_shares(
+    arrangement_id: uuid.UUID, body: ArrangementSharesUpdate, user: CurrentUser, db: DbSession
+) -> ArrangementDetail:
+    """Set which groups the piece is shared with (the whole set; [] unshares).
+
+    Only its owner may, and only into groups they belong to. No admin
+    override: that covers opening pieces, not handing them out (openclef#63).
+    A group the owner isn't in is reported as not found."""
+    arrangement = await _load_arrangement(db, arrangement_id, user)
+    if arrangement.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="not_arrangement_owner")
+    wanted = set(body.group_ids)
+    mine = set(
+        (
+            await db.execute(
+                select(GroupMember.group_id)
+                .where(GroupMember.user_id == user.id, GroupMember.group_id.in_(wanted))
+                # Holds off a concurrent removal from the group until this
+                # save lands, so that removal's share cleanup sees it.
+                .with_for_update()
+            )
+        ).scalars()
+    )
+    if wanted - mine:
+        raise HTTPException(status_code=422, detail="group_not_found")
+    await db.execute(sql_delete(ArrangementShare).where(ArrangementShare.arrangement_id == arrangement.id))
+    db.add_all([ArrangementShare(arrangement_id=arrangement.id, group_id=group_id) for group_id in wanted])
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Another save of this piece's shares, or a group deleted meanwhile.
+        raise HTTPException(status_code=409, detail="shares_changed") from None
     return await _detail(db, arrangement, user)
 
 
