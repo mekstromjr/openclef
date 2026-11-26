@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Append one piece (and the part being viewed) to a setlist the user can
-   * edit, or to a new one named here.
+   * add to, or to a new one named here. A shared setlist takes only pieces
+   * you own, so it's offered only for those (`owned`).
    */
   import { api, setlistErrorMessage, type SetlistDetail, type SetlistSummary } from '$lib/api';
 
@@ -9,12 +10,15 @@
     open = $bindable(false),
     arrangementId,
     partId,
+    owned,
     onAdded
   }: {
     open?: boolean;
     arrangementId: string;
     /** The part to open from the setlist; null follows the cover part. */
     partId: string | null;
+    /** The viewer owns this piece. */
+    owned: boolean;
     onAdded: (setlist: SetlistDetail) => void;
   } = $props();
 
@@ -38,7 +42,7 @@
   async function load() {
     try {
       const all = await api.get<SetlistSummary[]>('/api/v1/setlists');
-      setlists = all.filter((s) => s.can_edit);
+      setlists = all.filter((s) => s.can_edit && (owned || !s.shared));
       chosen = setlists[0]?.id ?? NEW;
     } catch {
       error = 'Could not load setlists.';

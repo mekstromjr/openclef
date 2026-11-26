@@ -294,6 +294,7 @@
     bind:open={addToSetlistOpen}
     arrangementId={arrangement.id}
     partId={activePart && activePart.id !== arrangement.parts[0]?.id ? activePart.id : null}
+    owned={authState.user?.id === arrangement.owner_id}
     onAdded={async (setlist) => {
       notice = `Added to "${setlist.name}" (${setlist.item_count} ${setlist.item_count === 1 ? 'piece' : 'pieces'}).`;
       await load(id);

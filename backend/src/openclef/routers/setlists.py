@@ -225,7 +225,9 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
     for item in items:
         arrangement = arrangements.get(item.arrangement_id) if item.arrangement_id else None
         if arrangement is None:
-            entry = SetlistEntry(id=item.id, position=item.position, available=False)
+            entry = SetlistEntry(
+                id=item.id, position=item.position, yours=item.added_by == user.id, available=False
+            )
             if item.deleted_at is not None and _may_know(item, setlist, user):
                 entry.removed = "deleted"
                 entry.title = item.title_snapshot
@@ -245,6 +247,7 @@ async def _detail(db: AsyncSession, setlist: Setlist, user: User) -> SetlistDeta
             SetlistEntry(
                 id=item.id,
                 position=item.position,
+                yours=item.added_by == user.id,
                 arrangement_id=arrangement.id,
                 title=arrangement.title,
                 subtitle=arrangement.subtitle,

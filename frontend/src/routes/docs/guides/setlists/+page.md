@@ -9,7 +9,23 @@ A setlist is a running order: the pieces for one rehearsal, service or recital, 
 
 ## Who can see and change a setlist
 
-A setlist is yours: you see it, and so does anyone you [share your library](/docs/guides/sharing) with. Only the person who created a setlist, or an admin, can rename it, reorder it, add or remove pieces, or delete it.
+A setlist is yours: you see it, and so does anyone you [share your library](/docs/guides/sharing) with. Only the person who created a setlist, or an admin, can rename it or delete it.
+
+## Sharing a setlist
+
+Open the setlist and use **Sharing** at the bottom to share it with a person or with a group you're in:
+
+- **Can view**: they see the setlist and play it.
+- **Can add**: they can also add their own pieces and reorder it. They can remove only the pieces they added.
+
+A shared setlist works like a shared folder: **everyone who sees it gets the pieces on it that whoever added them owns**, and nothing else. A piece someone shared with you doesn't pass on to your setlist's audience. So, on a shared setlist:
+
+- everyone, the owner included, can add only pieces they own; **Add pieces** shows only your own music;
+- if the setlist already holds pieces you don't own, sharing it first lists them and asks whether to share anyway. Its audience sees those entries as "a piece that isn't shared with you".
+
+If someone who could add pieces loses the setlist (you stop sharing with them, or they leave the group you shared it through), the pieces they added stop reaching anyone else. You see those entries as "*Title* is no longer shared with you by *name*" and can remove them.
+
+Only the owner shares a setlist; there is no admin override. Being someone's partner lets you see their setlists, not add to them.
 
 ## Making a setlist
 

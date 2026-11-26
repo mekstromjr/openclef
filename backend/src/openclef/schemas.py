@@ -418,6 +418,8 @@ class SetlistEntry(BaseModel):
 
     id: uuid.UUID
     position: int
+    # Added by the viewer: a contributor may remove only these.
+    yours: bool = False
     available: bool = True
     removed: Literal["deleted", "unshared"] | None = None
     removed_by: str | None = None

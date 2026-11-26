@@ -337,6 +337,8 @@ export interface SetlistEntry {
   /** Stable per entry: saving sends existing entries back by id. */
   id: string;
   position: number;
+  /** Added by this viewer: a contributor may remove only these. */
+  yours: boolean;
   /**
    * False when this viewer can't open the piece. `removed` then says why,
    * if the viewer saw the piece before: "deleted" (by `removed_by`) or
@@ -368,7 +370,12 @@ export interface SetlistSummary {
   item_count: number;
   created_at: string;
   updated_at: string;
+  /** Add pieces and reorder: the owner, an admin, or a contribute share. */
   can_edit: boolean;
+  /** Rename and delete: the owner or an admin. Sharing is the owner's alone. */
+  can_manage: boolean;
+  /** Shared with anyone: then everyone adds only pieces they own. */
+  shared: boolean;
 }
 
 export interface SetlistDetail extends SetlistSummary {
@@ -387,6 +394,22 @@ export interface SetlistItemKeep {
   part_id?: string | null;
 }
 
+export type SharePermission = 'view' | 'contribute';
+
+export interface SetlistShare {
+  id: string;
+  user: Person | null;
+  group: GroupRef | null;
+  permission: SharePermission;
+}
+
+/** The dry run before sharing: pieces this audience won't get. */
+export interface SetlistShareCheck {
+  held_back: { arrangement_id: string; title: string }[];
+  /** Held-back pieces the owner can't see themselves (counted, not named). */
+  hidden_count: number;
+}
+
 export const SETLIST_MAX_ITEMS = 200;
 
 /** The setlist with only the entries this viewer can open, for the player. */
@@ -399,6 +422,10 @@ export function setlistErrorMessage(error: unknown): string {
     if (['item_not_found', 'duplicate_item', 'item_hidden'].includes(error.detail as string))
       return 'This setlist changed somewhere else. Reload to see the latest version.';
     if (error.status === 409) return 'This setlist changed somewhere else. Reload to see the latest version.';
+    if (error.detail === 'not_your_piece')
+      return 'Only pieces you own can go on a shared setlist: its audience gets nothing else.';
+    if (error.detail === 'not_your_entry') return 'You can remove only the pieces you added.';
+    if (error.detail === 'cannot_contribute') return "This setlist is shared with you to view, not to change.";
     if (error.status === 403) return 'Only the owner of this setlist (or an admin) can change it.';
     if (error.detail === 'setlist_full') return `A setlist holds at most ${SETLIST_MAX_ITEMS} pieces.`;
     if (error.detail === 'arrangement_not_found') return "One of these pieces no longer exists or isn't shared with you. Reload and try again.";

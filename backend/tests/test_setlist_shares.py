@@ -165,6 +165,7 @@ async def test_a_contributor_adds_own_pieces_reorders_and_removes_their_own(app_
     r = await app_kit.client.post(f"{BASE}/{setlist}/items", json={"arrangement_id": bobs})
     assert r.status_code == 201, r.text
     alice_entry, bob_entry = r.json()["items"]
+    assert (alice_entry["yours"], bob_entry["yours"]) == (False, True)
 
     # Alice's piece reached Bob through the setlist, but it isn't his to add.
     r = await app_kit.client.post(f"{BASE}/{setlist}/items", json={"arrangement_id": alices})
