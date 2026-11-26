@@ -79,15 +79,19 @@ def adder_has_setlist() -> ColumnElement[bool]:
         .where(GroupMember.user_id == SetlistItem.added_by)
         .correlate(SetlistItem)
     )
+    # The EXISTS are pinned to setlist_items too, so a caller that joins
+    # setlists itself doesn't have its rows stand in for this entry's setlist.
     return or_(
         select(Setlist.id)
         .where(Setlist.id == SetlistItem.setlist_id, Setlist.owner_id == SetlistItem.added_by)
+        .correlate(SetlistItem)
         .exists(),
         select(SetlistShare.id)
         .where(
             SetlistShare.setlist_id == SetlistItem.setlist_id,
             or_(SetlistShare.user_id == SetlistItem.added_by, SetlistShare.group_id.in_(adder_groups)),
         )
+        .correlate(SetlistItem)
         .exists(),
     )
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from openclef.auth.hashing import hash_password
 from openclef.models.enums import UserRole
-from openclef.models.library import Arrangement
 from openclef.models.user import User
 
 
@@ -119,15 +118,11 @@ async def test_admin_can_promote_user(app_kit):
 # --- Delete + anonymize ----------------------------------------------
 
 
-async def test_delete_user_repoints_arrangements(app_kit):
+async def test_delete_user_removes_the_account(app_kit):
+    """What's kept and what goes is tests/test_account_deletion.py."""
     async with app_kit.sessionmaker() as s:
         await _seed_user(s, username="boss", role=UserRole.ADMIN)
         alice = await _seed_user(s, username="alice")
-        # Alice owns an arrangement
-        arr = Arrangement(title="Alice's Arrangement", owner_id=alice.id)
-        s.add(arr)
-        await s.commit()
-        arr_id = arr.id
 
     await _login(app_kit.client, "boss")
     r = await app_kit.client.delete(f"/api/v1/users/{alice.id}")
@@ -136,18 +131,8 @@ async def test_delete_user_repoints_arrangements(app_kit):
     async with app_kit.sessionmaker() as s:
         from sqlalchemy import select
 
-        # Alice is gone
         gone = (await s.execute(select(User).where(User.id == alice.id))).scalar_one_or_none()
         assert gone is None
-
-        # Arrangement survives, repointed to the tombstone user
-        surviving = (
-            await s.execute(select(Arrangement).where(Arrangement.id == arr_id))
-        ).scalar_one()
-        tombstone = (
-            await s.execute(select(User).where(User.username == "__deleted__"))
-        ).scalar_one()
-        assert surviving.owner_id == tombstone.id
 
 
 async def test_admin_cannot_delete_self(app_kit):
