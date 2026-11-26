@@ -595,3 +595,70 @@ class ArrangementSharesUpdate(BaseModel):
 
 # ArrangementDetail refers to SetlistRef, defined later in this module.
 ArrangementDetail.model_rebuild()
+
+
+# --- Deleting an account (openclef#65) ----------------------------------
+
+
+class DeletionSetlistRef(BaseModel):
+    """A setlist a kept piece reaches people through. `owner` is null when
+    the account being deleted owns it (it goes to whoever is picked for it).
+    `holders` are the others who hold it through a share, directly or in a
+    group: a piece keeps reaching the setlist only if its new owner is the
+    setlist's owner or one of these."""
+
+    id: uuid.UUID
+    name: str
+    owner: Person | None
+    holders: list[uuid.UUID]
+
+
+class DeletionPiece(BaseModel):
+    id: uuid.UUID
+    title: str
+    seen_by: list[Literal["partner", "group", "setlist"]]
+    suggested_owner: Person
+    setlists: list[DeletionSetlistRef]
+
+
+class DeletionSetlist(BaseModel):
+    id: uuid.UUID
+    name: str
+    seen_by: list[Literal["partner", "share"]]
+    suggested_owner: Person
+
+
+class DeletionGroup(BaseModel):
+    """A group with other members. It moves to one of them."""
+
+    id: uuid.UUID
+    name: str
+    members: list[Person]
+    suggested_owner: Person
+
+
+class DeletionCounts(BaseModel):
+    """What nobody else can see, so goes with the account."""
+
+    arrangements: int
+    setlists: int
+    groups: int
+
+
+class DeletionPlan(BaseModel):
+    user: Person
+    arrangements: list[DeletionPiece]
+    setlists: list[DeletionSetlist]
+    groups: list[DeletionGroup]
+    deleted: DeletionCounts
+
+
+class UserDeletion(BaseModel):
+    """New owners chosen in the delete dialog, item id to user id. Anything
+    left out that someone else can see goes to its suggested owner."""
+
+    model_config = _WRITE_CONFIG
+
+    arrangements: dict[_JsonUuid, _JsonUuid] = Field(default_factory=dict)
+    setlists: dict[_JsonUuid, _JsonUuid] = Field(default_factory=dict)
+    groups: dict[_JsonUuid, _JsonUuid] = Field(default_factory=dict)

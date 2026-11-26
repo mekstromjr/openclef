@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from pydantic import ValidationError
 from sqlalchemy import and_, func, select
 from sqlalchemy import delete as sql_delete
-from sqlalchemy import update as sql_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -38,8 +37,8 @@ from openclef.schemas import (
     ArrangementSharesUpdate,
     ArrangementSummary,
     ArrangementUpdate,
-    FacetCount,
     ArrangementUploadMetadata,
+    FacetCount,
     GroupRef,
     PartRead,
     SetlistRef,
@@ -48,6 +47,7 @@ from openclef.schemas import (
 from openclef.services.access import can_manage, in_library, visible_arrangements, visible_setlists
 from openclef.services.library_search import LibraryFilters, facet_queries, order_by
 from openclef.services.pdf_meta import InvalidPdfError
+from openclef.services.setlist_entries import mark_entries_deleted
 from openclef.services.uploads import (
     CheckedUpload,
     NotPdfError,
@@ -532,32 +532,7 @@ async def delete_arrangement(
     # once the row is gone (409 arrangement_not_found), instead of leaving an
     # entry the RESTRICT key would refuse.
     await db.execute(select(Arrangement.id).where(Arrangement.id == arrangement_id).with_for_update())
-    # Title and owner come from the locked row in the same statement, so a
-    # rename that committed before the lock is what gets recorded.
-    marked = await db.execute(
-        sql_update(SetlistItem)
-        .where(SetlistItem.arrangement_id == Arrangement.id, Arrangement.id == arrangement_id)
-        .values(
-            arrangement_id=None,
-            part_id=None,
-            title_snapshot=Arrangement.title,
-            piece_owner_id=Arrangement.owner_id,
-            deleted_by=user.id,
-            deleted_at=func.now(),
-        )
-        .returning(SetlistItem.setlist_id)
-        .execution_options(synchronize_session=False)
-    )
-    # The setlists changed, so a tab holding an older copy gets 409 on save.
-    # Only the ones locked above: locking another now would invert the order.
-    changed = set(marked.scalars()) & locked
-    if changed:
-        await db.execute(
-            sql_update(Setlist)
-            .where(Setlist.id.in_(changed))
-            .values(updated_at=func.clock_timestamp())
-            .execution_options(synchronize_session=False)
-        )
+    await mark_entries_deleted(db, [arrangement_id], deleted_by=user.id, locked_setlists=locked)
     keys = [
         key
         for storage_key, part_id, thumb in (
