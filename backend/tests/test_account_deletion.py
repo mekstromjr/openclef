@@ -55,7 +55,8 @@ async def test_private_content_goes_with_its_files(app_kit):
     await _login(app_kit, "alice")
     piece, part = await _upload(app_kit, "Diary")
     setlist = await _setlist(app_kit, "Practice", piece)
-    await _group(app_kit, "Just me")
+    just_me = await _group(app_kit, "Just me")
+    await _share_piece(app_kit, piece, just_me)  # nobody else is in it
     async with app_kit.sessionmaker() as s:
         key = (await s.execute(select(Part.storage_key))).scalar_one()
     thumb = thumbnail_key(part)

@@ -87,6 +87,15 @@ entry whose piece is no longer shared stays as it was. Saving a running order se
 back by id, so an editor can't drop or rewrite entries they can't see. What such an entry says is
 decided on the server: only people who saw the piece before get its title.
 
+Deleting an account hands on what other people use and deletes the rest. An item is kept when
+someone else can see it under the sharing rules (a partner, a group with other members, a setlist
+that passes it on); the admin override doesn't count, or everything would be kept. Each kept item
+goes to someone who already sees it, so it doesn't vanish for the people it was kept for when the
+account's partnerships and shares go with it: the first partner, else a setlist-only piece's
+setlist owner, else the admin. Groups with other members move to one of them and keep their shares.
+The admin sees this as a plan and can pick other owners; the delete works it out again under its
+locks, so something shared since the plan was shown is kept rather than lost.
+
 Every arrangement field records where its value came from (`field_origins`: user, PDF, file name),
 so automatic enrichment can never overwrite something a person typed.
 

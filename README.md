@@ -140,8 +140,9 @@ scripts/    demo-library seeding
 
 - **Phase 1, Library:** upload, parts, search, viewer, accounts and SSO.
 - **Sharing** (in progress): personal libraries shared with partners (one-way, like Immich's
-  partner sharing), groups, and shared setlists that pass on what each contributor owns are
-  done; next is what happens to someone's music when their account is deleted.
+  partner sharing), groups, shared setlists that pass on what each contributor owns, and
+  account deletion that hands on what other people use are done; next is the admin screen
+  for it.
 - **Phase 2, Performance** (in progress): setlists are done; next are an offline performance
   mode, page turns from Bluetooth pedals, and per-user annotations (the schema already has the
   table).
