@@ -276,9 +276,12 @@ async def test_a_contributor_who_loses_the_setlist_stops_passing_on(app_kit):
     kit = app_kit
     owner = await _user(kit, "owner")
     await _login(kit, "owner")
-    setlist = await _setlist(kit, "Recital")
+    own, _ = await _upload(kit, "Own piece")
+    setlist = await _setlist(kit, "Recital", own)
     contributor = await _user(kit, "contributor")
-    choir = await make_group(kit, owner.id, contributor.id)
+    # The owner is a member too, as the API makes them: their own entries
+    # must not stand in for the contributor's.
+    choir = await make_group(kit, owner.id, owner.id, contributor.id)
     await share_setlist(kit, setlist, group_id=choir, permission=SharePermission.CONTRIBUTE)
     audience = await _user(kit, "audience")
     await share_setlist(kit, setlist, user_id=audience.id)
@@ -290,7 +293,7 @@ async def test_a_contributor_who_loses_the_setlist_stops_passing_on(app_kit):
 
     async def seen_by(viewer):
         await _login(kit, viewer)
-        [item] = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+        _, item = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
         opens = (await kit.client.get(f"/api/v1/arrangements/{contributed}")).status_code == 200
         return item["available"], item["removed"], item["title"], opens
 

@@ -71,7 +71,14 @@ def visible_setlists(user: User) -> ColumnElement[bool]:
 def adder_has_setlist() -> ColumnElement[bool]:
     """Correlated on `setlist_items`: whoever added the entry still has its
     setlist, as its owner or through a share (direct or via a group)."""
-    adder_groups = select(GroupMember.group_id).where(GroupMember.user_id == SetlistItem.added_by)
+    # Correlated explicitly: left to itself, SQLAlchemy gives this nested IN
+    # its own FROM setlist_items, which asks whether *anyone* who added an
+    # entry is in the group, not this entry's adder.
+    adder_groups = (
+        select(GroupMember.group_id)
+        .where(GroupMember.user_id == SetlistItem.added_by)
+        .correlate(SetlistItem)
+    )
     return or_(
         select(Setlist.id)
         .where(Setlist.id == SetlistItem.setlist_id, Setlist.owner_id == SetlistItem.added_by)
