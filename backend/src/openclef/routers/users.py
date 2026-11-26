@@ -160,6 +160,7 @@ async def get_deletion_plan(
 
     return DeletionPlan(
         user=Person(id=user.id, username=user.username),
+        partners=[person(pid) for pid in plan.partners],
         arrangements=[
             DeletionPiece(
                 id=p.id,

@@ -101,6 +101,7 @@ async def test_a_partner_inherits_by_default(app_kit):
     [kept_setlist] = plan["setlists"]
     assert (kept_setlist["seen_by"], kept_setlist["suggested_owner"]["username"]) == (["partner"], "bob")
     assert plan["deleted"] == {"arrangements": 0, "setlists": 0, "groups": 0}
+    assert [p["username"] for p in plan["partners"]] == ["bob"]
 
     assert (await _delete(app_kit, alice)).status_code == 204
     assert await _owner_of(app_kit, Arrangement, piece) == bob.id
@@ -333,3 +334,26 @@ async def test_refusals(app_kit, monkeypatch):
     assert (r.status_code, r.json()["detail"]) == (422, "group_not_found")
     # Nothing happened.
     assert await _owner_of(app_kit, Arrangement, piece) == alice.id
+
+
+async def test_a_piece_follows_the_pick_for_its_setlist(app_kit):
+    """Alice's piece reaches Bob only through her own setlist. Picking Carol
+    for the setlist and nothing for the piece sends the piece to Carol too,
+    so Bob keeps it."""
+    alice = await _user(app_kit, "alice")
+    bob = await _user(app_kit, "bob")
+    carol = await _user(app_kit, "carol")
+    await _login(app_kit, "alice")
+    piece, _ = await _upload(app_kit, "Anthem")
+    setlist = await _setlist(app_kit, "Recital", piece)
+    await _share_setlist(app_kit, setlist, user=bob)
+
+    await _admin(app_kit)
+    [kept] = (await _plan(app_kit, alice))["arrangements"]
+    assert (kept["seen_by"], kept["suggested_owner"]["username"]) == (["setlist"], "admin")
+    [via] = kept["setlists"]
+    assert (via["owner"], via["holders"]) == (None, [str(bob.id)])
+    assert (await _delete(app_kit, alice, setlists={setlist: carol.id})).status_code == 204
+    assert await _owner_of(app_kit, Arrangement, piece) == carol.id
+    await _login(app_kit, "bob")
+    assert (await app_kit.client.get(f"/api/v1/arrangements/{piece}")).status_code == 200

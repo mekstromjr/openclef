@@ -647,6 +647,9 @@ class DeletionCounts(BaseModel):
 
 class DeletionPlan(BaseModel):
     user: Person
+    # People the account shares its library with. Only the suggested owner
+    # keeps seeing what they inherit; the others lose the account's library.
+    partners: list[Person]
     arrangements: list[DeletionPiece]
     setlists: list[DeletionSetlist]
     groups: list[DeletionGroup]

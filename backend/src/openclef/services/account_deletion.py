@@ -51,6 +51,9 @@ class KeptPiece:
     seen_by: list[str]
     default_owner: uuid.UUID
     setlists: list[PlannedSetlist]
+    # Set when the default is "whoever gets this setlist of the account's":
+    # the delete then follows the admin's pick for that setlist.
+    follows_setlist: uuid.UUID | None = None
 
 
 @dataclass
@@ -77,6 +80,7 @@ class Plan:
     private_pieces: list[uuid.UUID] = field(default_factory=list)
     private_setlists: list[uuid.UUID] = field(default_factory=list)
     private_groups: int = 0
+    partners: list[uuid.UUID] = field(default_factory=list)  # by username
     # Everyone named anywhere above, for the response.
     names: dict[uuid.UUID, str] = field(default_factory=dict)
 
@@ -107,6 +111,7 @@ async def build_plan(db: AsyncSession, account: User, admin: User) -> Plan:
             )
         ).all()
     ]
+    plan.partners = partners
     fallback = partners[0] if partners else admin.id
 
     # Groups: kept when someone else is in them.
@@ -226,16 +231,19 @@ async def build_plan(db: AsyncSession, account: User, admin: User) -> Plan:
         if not seen_by:
             plan.private_pieces.append(aid)
             continue
+        follows = None
         if partners:
             default = fallback
         elif via:
             # The setlist's owner already holds it, so the piece keeps
             # reaching everyone it reached. Someone else's setlist first.
             first = next((s for s in via if s.owner_id != uid), via[0])
+            if first.owner_id == uid:
+                follows = first.id
             default = setlist_owner.get(first.id, first.owner_id)
         else:
             default = fallback
-        plan.pieces.append(KeptPiece(aid, title, seen_by, default, via))
+        plan.pieces.append(KeptPiece(aid, title, seen_by, default, via, follows))
 
     named = {admin.id, *partners}
     named |= {p.default_owner for p in plan.pieces} | {g.default_owner for g in plan.groups}
@@ -307,12 +315,14 @@ async def delete_account(
     own_pieces = {p.id for p in plan.pieces} | set(plan.private_pieces)
     own_setlists = {s.id for s in plan.setlists} | set(plan.private_setlists)
     kept_groups = {g.id: g for g in plan.groups}
-    piece_owner = await _resolve(
-        db, account, tombstone_name, arrangements, {p.id: p.default_owner for p in plan.pieces}, own_pieces
-    )
     setlist_owner = await _resolve(
         db, account, tombstone_name, setlists, {s.id: s.default_owner for s in plan.setlists}, own_setlists
     )
+    piece_defaults = {
+        p.id: setlist_owner.get(p.follows_setlist, p.default_owner) if p.follows_setlist else p.default_owner
+        for p in plan.pieces
+    }
+    piece_owner = await _resolve(db, account, tombstone_name, arrangements, piece_defaults, own_pieces)
     if set(groups) - set(kept_groups):
         raise DeletionError("group_not_found")
     for gid, new_owner in groups.items():
