@@ -12,6 +12,8 @@
     type SetlistDetail
   } from '$lib/api';
   import AddPiecesDialog from '$lib/components/setlists/AddPiecesDialog.svelte';
+  import SetlistSharing from '$lib/components/setlists/SetlistSharing.svelte';
+  import { authState } from '$lib/stores/auth.svelte';
   import { moveItem, orderChanged, playPosition, removeItem, toWrite, type EditableEntry } from '$lib/setlists/order';
 
   const id = $derived(page.params.id as string);
@@ -30,6 +32,19 @@
   let dragArmed = $state<number | null>(null);
   // Parts of each piece, for the "which part opens" picker (editors only).
   let partsByArrangement = $state<Record<string, Part[]>>({});
+
+  const isOwner = $derived(Boolean(setlist && authState.user?.id === setlist.owner_id));
+
+  /** Sharing changed: take the new `shared` flag without touching unsaved edits. */
+  async function refreshShared() {
+    if (!setlist) return;
+    try {
+      const fresh = await api.get<SetlistDetail>(`/api/v1/setlists/${setlist.id}`);
+      setlist = { ...setlist, shared: fresh.shared };
+    } catch {
+      // The next load picks it up.
+    }
+  }
 
   const dirty = $derived(setlist ? orderChanged(setlist.items, entries) : false);
 
@@ -102,6 +117,7 @@
       (piece, offset): EditableEntry => ({
         id: null,
         position: entries.length + offset,
+        yours: true,
         available: true,
         removed: null,
         removed_by: null,
@@ -205,7 +221,9 @@
         {/if}
         {#if setlist.can_edit && !renaming}
           <button type="button" onclick={() => (addOpen = true)} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Add pieces</button>
-          <button type="button" onclick={() => { newName = setlist?.name ?? ''; renaming = true; }} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Rename</button>
+          {#if setlist.can_manage}
+            <button type="button" onclick={() => { newName = setlist?.name ?? ''; renaming = true; }} class="px-3 py-1.5 rounded border border-clef-graphite-500 hover:border-clef-claret">Rename</button>
+          {/if}
         {/if}
       </div>
     </div>
@@ -300,7 +318,9 @@
               <div class="flex shrink-0 items-center">
                 <button type="button" onclick={() => move(index, index - 1)} disabled={index === 0} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {label} up">↑</button>
                 <button type="button" onclick={() => move(index, index + 1)} disabled={index === entries.length - 1} class="rounded px-2 py-1 text-clef-stone-300 hover:text-clef-ivory disabled:opacity-30" aria-label="Move {label} down">↓</button>
-                <button type="button" onclick={() => remove(index)} class="rounded px-2 py-1 text-clef-stone-300/70 hover:text-clef-claret" aria-label="Remove {label} from the setlist">✕</button>
+                {#if setlist.can_manage || entry.yours}
+                  <button type="button" onclick={() => remove(index)} class="rounded px-2 py-1 text-clef-stone-300/70 hover:text-clef-claret" aria-label="Remove {label} from the setlist">✕</button>
+                {/if}
               </div>
             {/if}
           </li>
@@ -308,14 +328,18 @@
       </ol>
     {/if}
 
-    {#if setlist.can_edit}
+    {#if isOwner}
+      <SetlistSharing setlistId={setlist.id} onChanged={refreshShared} />
+    {/if}
+
+    {#if setlist.can_manage}
       <div class="pt-4">
         <button type="button" onclick={deleteSetlist} class="text-sm text-clef-claret/80 hover:text-clef-claret">Delete setlist</button>
       </div>
     {/if}
   </div>
 
-  <AddPiecesDialog bind:open={addOpen} onAdd={addPieces} />
+  <AddPiecesDialog bind:open={addOpen} mine={setlist.shared} onAdd={addPieces} />
 {:else}
   <p class="px-6 py-10 text-sm text-clef-stone-300/70">Loading…</p>
 {/if}

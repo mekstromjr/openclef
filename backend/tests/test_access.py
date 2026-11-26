@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from openclef.auth.hashing import hash_password
-from openclef.models.enums import UserRole
+from openclef.models.enums import SharePermission, UserRole
 from openclef.models.setlist import SetlistItem
 from openclef.models.sharing import Partnership
 from openclef.models.user import User
@@ -240,6 +240,7 @@ async def test_a_shared_setlist_passes_on_only_what_each_adder_owns(app_kit):
     setlist = await _setlist(kit, "Recital", own, lent)
 
     contributor = await _user(kit, "contributor")
+    await share_setlist(kit, setlist, user_id=contributor.id, permission=SharePermission.CONTRIBUTE)
     await _login(kit, "contributor")
     contributed, _ = await _upload(kit, "Contributed piece")
     async with kit.sessionmaker() as s:
@@ -267,6 +268,42 @@ async def test_a_shared_setlist_passes_on_only_what_each_adder_owns(app_kit):
     await _login(kit, "owner")
     items = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
     assert all(item["available"] for item in items)
+
+
+async def test_a_contributor_who_loses_the_setlist_stops_passing_on(app_kit):
+    """openclef#64 acceptance: once a contributor's share ends, the pieces
+    they added reach nobody, and say "no longer shared" to the owner."""
+    kit = app_kit
+    owner = await _user(kit, "owner")
+    await _login(kit, "owner")
+    own, _ = await _upload(kit, "Own piece")
+    setlist = await _setlist(kit, "Recital", own)
+    contributor = await _user(kit, "contributor")
+    # The owner is a member too (make_group adds them): their own entries
+    # must not stand in for the contributor's.
+    choir = await make_group(kit, owner.id, contributor.id)
+    await share_setlist(kit, setlist, group_id=choir, permission=SharePermission.CONTRIBUTE)
+    audience = await _user(kit, "audience")
+    await share_setlist(kit, setlist, user_id=audience.id)
+
+    await _login(kit, "contributor")
+    contributed, _ = await _upload(kit, "Contributed piece")
+    r = await kit.client.post(f"/api/v1/setlists/{setlist}/items", json={"arrangement_id": contributed})
+    assert r.status_code == 201, r.text
+
+    async def seen_by(viewer):
+        await _login(kit, viewer)
+        _, item = (await kit.client.get(f"/api/v1/setlists/{setlist}")).json()["items"]
+        opens = (await kit.client.get(f"/api/v1/arrangements/{contributed}")).status_code == 200
+        return item["available"], item["removed"], item["title"], opens
+
+    assert await seen_by("audience") == (True, None, "Contributed piece", True)
+    # The contributor leaves the group the share went through.
+    await _login(kit, "contributor")
+    r = await kit.client.delete(f"/api/v1/groups/{choir}/members/{contributor.id}")
+    assert r.status_code == 204
+    assert await seen_by("audience") == (False, None, None, False)
+    assert await seen_by("owner") == (False, "unshared", "Contributed piece", False)
 
 
 async def test_reordering_keeps_who_added_each_piece(app_kit):

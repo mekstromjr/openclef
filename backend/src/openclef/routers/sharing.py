@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openclef.auth.deps import get_current_user
 from openclef.db import get_session
 from openclef.models.library import Arrangement
-from openclef.models.sharing import ArrangementShare, Group, GroupMember, Partnership
+from openclef.models.setlist import Setlist
+from openclef.models.sharing import ArrangementShare, Group, GroupMember, Partnership, SetlistShare
 from openclef.models.user import User
 from openclef.routers.users import TOMBSTONE_USERNAME
 from openclef.schemas import (
@@ -252,8 +253,9 @@ async def remove_member(
 ) -> Response:
     """The owner removes a member, or a member leaves (their own id).
 
-    The departing member's pieces stop being shared with the group: a share
-    is a member handing their music to the others, so it ends when they go.
+    The departing member's pieces and setlists stop being shared with the
+    group: a share is a member handing their music to the others, so it ends
+    when they go.
     The owner can't leave; they delete the group instead."""
     group = await _member_group(db, group_id, user)
     if user_id == user.id:
@@ -272,6 +274,13 @@ async def remove_member(
             ArrangementShare.arrangement_id.in_(
                 select(Arrangement.id).where(Arrangement.owner_id == user_id)
             ),
+        )
+    )
+    # Their setlists shared with the group too (openclef#64).
+    await db.execute(
+        delete(SetlistShare).where(
+            SetlistShare.group_id == group.id,
+            SetlistShare.setlist_id.in_(select(Setlist.id).where(Setlist.owner_id == user_id)),
         )
     )
     await db.commit()

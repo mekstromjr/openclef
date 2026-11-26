@@ -82,7 +82,7 @@
           <a href="/setlists/{setlist.id}" class="min-w-0 flex-1 group">
             <span class="block truncate font-medium group-hover:text-clef-claret">{setlist.name}</span>
             <span class="block text-xs text-clef-stone-300/70">
-              {setlist.item_count} {setlist.item_count === 1 ? 'piece' : 'pieces'} · {setlist.owner_username} · {updated(setlist.updated_at)}
+              {setlist.item_count} {setlist.item_count === 1 ? 'piece' : 'pieces'} · {setlist.owner_username}{setlist.shared ? ' · shared' : ''} · {updated(setlist.updated_at)}
             </span>
           </a>
           {#if setlist.item_count > 0}

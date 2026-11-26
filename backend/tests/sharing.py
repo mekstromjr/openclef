@@ -26,7 +26,9 @@ async def make_group(kit, owner_id, *member_ids) -> uuid.UUID:
         group = Group(name="Group", owner_id=_id(owner_id))
         s.add(group)
         await s.flush()
-        s.add_all(GroupMember(group_id=group.id, user_id=_id(member)) for member in member_ids)
+        # The owner is always a member, as the API makes them (openclef#63).
+        members = dict.fromkeys([_id(owner_id), *(_id(member) for member in member_ids)])
+        s.add_all(GroupMember(group_id=group.id, user_id=member) for member in members)
         await s.commit()
         return group.id
 

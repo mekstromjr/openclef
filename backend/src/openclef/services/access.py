@@ -14,9 +14,12 @@ A user can see an **arrangement** (and so its parts, files and thumbnails) if:
   1. they own it;
   2. its owner shares their library with them;
   3. it is shared with a group they belong to;
-  4. it is on a setlist they can see, **and** whoever put it there owns it.
-     A shared setlist passes on what its contributors own, never a piece
-     someone else shared with them;
+  4. it is on a setlist they can see, **and** whoever put it there owns it
+     **and** still has that setlist: they own it, or hold a share on it
+     (directly or through a group they're in). A shared setlist passes on
+     what its contributors own, never a piece someone else shared with
+     them, and stops passing on a contributor's pieces once they lose the
+     setlist (openclef#64). Being the owner's partner doesn't count;
   5. they are an admin.
 
 Partnerships don't chain: only the direct sharer's library counts.
@@ -35,7 +38,7 @@ import uuid
 
 from sqlalchemy import ColumnElement, Select, and_, or_, select, true
 
-from openclef.models.enums import UserRole
+from openclef.models.enums import SharePermission, UserRole
 from openclef.models.library import Arrangement
 from openclef.models.setlist import Setlist, SetlistItem
 from openclef.models.sharing import ArrangementShare, GroupMember, Partnership, SetlistShare
@@ -65,6 +68,30 @@ def visible_setlists(user: User) -> ColumnElement[bool]:
     )
 
 
+def adder_has_setlist() -> ColumnElement[bool]:
+    """Correlated on `setlist_items`: whoever added the entry still has its
+    setlist, as its owner or through a share (direct or via a group)."""
+    # Correlated explicitly: left to itself, SQLAlchemy gives this nested IN
+    # its own FROM setlist_items, which asks whether *anyone* who added an
+    # entry is in the group, not this entry's adder.
+    adder_groups = (
+        select(GroupMember.group_id)
+        .where(GroupMember.user_id == SetlistItem.added_by)
+        .correlate(SetlistItem)
+    )
+    return or_(
+        select(Setlist.id)
+        .where(Setlist.id == SetlistItem.setlist_id, Setlist.owner_id == SetlistItem.added_by)
+        .exists(),
+        select(SetlistShare.id)
+        .where(
+            SetlistShare.setlist_id == SetlistItem.setlist_id,
+            or_(SetlistShare.user_id == SetlistItem.added_by, SetlistShare.group_id.in_(adder_groups)),
+        )
+        .exists(),
+    )
+
+
 def visible_arrangements(user: User) -> ColumnElement[bool]:
     """WHERE clause on `Arrangement` for the pieces `user` can see.
 
@@ -80,8 +107,12 @@ def visible_arrangements(user: User) -> ColumnElement[bool]:
         .where(
             SetlistItem.arrangement_id == Arrangement.id,
             SetlistItem.added_by == Arrangement.owner_id,
+            adder_has_setlist(),
             SetlistItem.setlist_id.in_(select(Setlist.id).where(visible_setlists(user))),
         )
+        # Only the piece comes from outside: a caller that joins setlist
+        # items itself must not have its rows stand in for these.
+        .correlate(Arrangement)
         .exists()
     )
     return or_(
@@ -140,4 +171,24 @@ def can_manage(owner_id, user: User) -> bool:
     return owner_id == user.id or user.role == UserRole.ADMIN
 
 
-__all__ = ["can_manage", "in_library", "visible_arrangements", "visible_setlists"]
+def contributable_setlists(user: User) -> Select:
+    """Ids of setlists `user` may add to and reorder: their own, and those
+    shared with them (directly or through a group) with contribute. Admins
+    may change any setlist, so they get every one."""
+    if user.role == UserRole.ADMIN:
+        return select(Setlist.id)
+    contribute = select(SetlistShare.setlist_id).where(
+        SetlistShare.permission == SharePermission.CONTRIBUTE,
+        or_(SetlistShare.user_id == user.id, SetlistShare.group_id.in_(_groups_of(user))),
+    )
+    return select(Setlist.id).where(or_(Setlist.owner_id == user.id, Setlist.id.in_(contribute)))
+
+
+__all__ = [
+    "adder_has_setlist",
+    "can_manage",
+    "contributable_setlists",
+    "in_library",
+    "visible_arrangements",
+    "visible_setlists",
+]

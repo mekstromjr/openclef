@@ -2,14 +2,16 @@
   /**
    * Pick pieces from the library to append to a setlist. Uses the library
    * search endpoint, so results narrow as you type. Selection order is the
-   * order the pieces are added in.
+   * order the pieces are added in. On a shared setlist (`mine`) only your
+   * own pieces are offered: nothing else would reach its audience.
    */
   import { api, type ArrangementList, type ArrangementSummary } from '$lib/api';
 
   let {
     open = $bindable(false),
+    mine = false,
     onAdd
-  }: { open?: boolean; onAdd: (pieces: ArrangementSummary[]) => void } = $props();
+  }: { open?: boolean; mine?: boolean; onAdd: (pieces: ArrangementSummary[]) => void } = $props();
 
   let dialog: HTMLDialogElement;
   let query = $state('');
@@ -33,6 +35,7 @@
       // Best matches first while searching; alphabetical when browsing.
       const params = new URLSearchParams({ page_size: '20', sort: q ? 'relevance' : 'title' });
       if (q) params.set('q', q);
+      if (mine) params.set('scope', 'mine');
       try {
         const list = await api.get<ArrangementList>(`/api/v1/arrangements?${params}`);
         if (token !== searchToken) return;
@@ -73,6 +76,9 @@
 >
   <form onsubmit={add} class="p-6 space-y-4 text-sm">
     <h2 class="text-xl font-serif font-semibold">Add pieces</h2>
+    {#if mine}
+      <p class="text-xs text-clef-stone-300/80">This setlist is shared, so only your own music can go on it.</p>
+    {/if}
     <label class="block">
       <span class="sr-only">Search the library</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -96,7 +102,7 @@
             </label>
           </li>
         {:else}
-          <li class="px-3 py-6 text-center text-clef-stone-300/70">{query.trim() ? 'No matches.' : 'The library is empty.'}</li>
+          <li class="px-3 py-6 text-center text-clef-stone-300/70">{query.trim() ? 'No matches.' : mine ? "You haven't added any music yet." : 'The library is empty.'}</li>
         {/each}
       </ul>
       {#if total > results.length}

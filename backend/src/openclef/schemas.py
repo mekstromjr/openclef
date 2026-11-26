@@ -23,6 +23,7 @@ from openclef.models.enums import (
     KeySignature,
     PartType,
     Period,
+    SharePermission,
     Theme,
     UserRole,
 )
@@ -417,6 +418,8 @@ class SetlistEntry(BaseModel):
 
     id: uuid.UUID
     position: int
+    # Added by the viewer: a contributor may remove only these.
+    yours: bool = False
     available: bool = True
     removed: Literal["deleted", "unshared"] | None = None
     removed_by: str | None = None
@@ -440,11 +443,54 @@ class SetlistSummary(BaseModel):
     item_count: int
     created_at: datetime
     updated_at: datetime
+    # Add pieces and reorder: the owner, an admin, or a contribute share.
     can_edit: bool
+    # Rename and delete: the owner or an admin. Sharing is the owner's alone.
+    can_manage: bool = False
+    # Shared with anyone (a setlist share; partners don't count). On a
+    # shared setlist everyone adds only pieces they own (openclef#64).
+    shared: bool = False
 
 
 class SetlistDetail(SetlistSummary):
     items: list[SetlistEntry]
+
+
+class SetlistShareCreate(BaseModel):
+    """Share a setlist with one person or one group you're in."""
+
+    model_config = _WRITE_CONFIG
+
+    user_id: _JsonUuid | None = None
+    group_id: _JsonUuid | None = None
+    permission: SharePermission
+
+
+class SetlistShareUpdate(BaseModel):
+    model_config = _WRITE_CONFIG
+
+    permission: SharePermission
+
+
+class SetlistShareRead(BaseModel):
+    id: uuid.UUID
+    user: "Person | None" = None
+    group: "GroupRef | None" = None
+    permission: SharePermission
+
+
+class HeldBackPiece(BaseModel):
+    arrangement_id: uuid.UUID
+    title: str
+
+
+class SetlistShareCheck(BaseModel):
+    """The dry run before sharing: pieces on the setlist that its audience
+    won't get, because whoever added them doesn't own them. Pieces the
+    owner can't see themselves are only counted."""
+
+    held_back: list[HeldBackPiece]
+    hidden_count: int = 0
 
 
 class SetlistRef(BaseModel):

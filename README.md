@@ -11,7 +11,7 @@ library and shares it with the household, so nobody has to email PDFs around bef
 **Status:** early and in active development. Accounts (password and optional OIDC), PDF upload,
 search, the library, the page viewer and setlists work end to end. You can share your library
 with another person (one way, like Immich's partner sharing) or share chosen pieces with a
-group; shared setlists are being built. Annotations have a database table but no API or UI yet.
+group, and share setlists that pass on only what each contributor owns. Annotations have a database table but no API or UI yet.
 
 Developed on a self-hosted GitLab; this GitHub repository is a read-only mirror. Issues and pull
 requests are not accepted here.
@@ -37,7 +37,8 @@ requests are not accepted here.
 
 **Setlists**
 - Put pieces in running order for a rehearsal, service or recital, choosing which part each one
-  opens. A setlist reaches whoever can see it; its owner arranges it.
+  opens. Share it with people or groups to view, or to add their own pieces; it passes on only
+  the music whoever added it owns.
 - Play straight through: past the last page of one piece comes the first page of the next, with a
   "Next:" banner and the next PDF already downloaded.
 
@@ -139,8 +140,8 @@ scripts/    demo-library seeding
 
 - **Phase 1, Library:** upload, parts, search, viewer, accounts and SSO.
 - **Sharing** (in progress): personal libraries shared with partners (one-way, like Immich's
-  partner sharing) and groups are done; next are shared setlists that pass on what each
-  contributor owns.
+  partner sharing), groups, and shared setlists that pass on what each contributor owns are
+  done; next is what happens to someone's music when their account is deleted.
 - **Phase 2, Performance** (in progress): setlists are done; next are an offline performance
   mode, page turns from Bluetooth pedals, and per-user annotations (the schema already has the
   table).

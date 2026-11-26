@@ -35,7 +35,11 @@ To share a piece with a group, open the piece and tick the group next to **Share
 
 Members can find, play and edit what's shared with the group, and put it on their setlists. Each group's name in Settings opens its page: everything shared with it, with the library's search and filters.
 
-When someone leaves or is removed, the group's music disappears for them, and the pieces they shared with it leave the group. Deleting a group stops everything it shared, but the music stays with its owners.
+When someone leaves or is removed, the group's music disappears for them, and the pieces and setlists they shared with it leave the group. Deleting a group stops everything it shared, but the music stays with its owners.
+
+## Sharing a setlist
+
+A setlist can be shared with people or groups, to view or to add their own pieces. Whoever sees it gets only the pieces on it that the person who added them owns, so a setlist never hands on music someone shared with you. See [Setlists](/docs/guides/setlists#sharing-a-setlist).
 
 ## Music shared with you
 

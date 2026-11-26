@@ -75,6 +75,12 @@ nobody else can, admins included: the override covers opening, not handing music
 a member handing their music to the others, so it ends when that member leaves or is removed.
 To anyone outside, a group does not exist (every group route answers 404).
 
+A setlist is shared with people or groups to view or to contribute. It works like a shared folder:
+its audience gets a piece only if whoever added it owns it and still has the setlist (as its owner or
+through a share), so a setlist can't pass on music someone shared with you, and a contributor who
+loses access stops passing theirs on. On a shared setlist everyone adds only pieces they own; before
+sharing, a dry run lists the pieces the audience won't get. Sharing is the owner's alone.
+
 A setlist entry has a stable id and outlives its piece. Deleting a piece turns its entries into
 "deleted" records (the title then, who deleted it, whose piece it was) instead of refusing, and an
 entry whose piece is no longer shared stays as it was. Saving a running order sends existing entries
