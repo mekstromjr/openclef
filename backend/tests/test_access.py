@@ -279,9 +279,9 @@ async def test_a_contributor_who_loses_the_setlist_stops_passing_on(app_kit):
     own, _ = await _upload(kit, "Own piece")
     setlist = await _setlist(kit, "Recital", own)
     contributor = await _user(kit, "contributor")
-    # The owner is a member too, as the API makes them: their own entries
+    # The owner is a member too (make_group adds them): their own entries
     # must not stand in for the contributor's.
-    choir = await make_group(kit, owner.id, owner.id, contributor.id)
+    choir = await make_group(kit, owner.id, contributor.id)
     await share_setlist(kit, setlist, group_id=choir, permission=SharePermission.CONTRIBUTE)
     audience = await _user(kit, "audience")
     await share_setlist(kit, setlist, user_id=audience.id)

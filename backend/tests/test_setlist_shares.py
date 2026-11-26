@@ -245,3 +245,28 @@ async def test_dry_run_lists_what_the_audience_wont_get(app_kit):
         f"{BASE}/{plain}/shares?dry_run=true", json={"user_id": str(friend.id), "permission": "view"}
     )
     assert r.json() == {"held_back": [], "hidden_count": 0}
+
+
+async def test_dry_run_counts_a_departed_contributors_piece(app_kit):
+    """The dry run applies the same pass-on rule: once a contributor leaves
+    the group the share went through, their piece is held back, and the
+    owner (who can't see it any more) gets a count, not its title."""
+    alice = await _user(app_kit, "alice")
+    bob = await _user(app_kit, "bob")
+    carol = await _user(app_kit, "carol")
+    await _login(app_kit, "alice")
+    own, _ = await _upload(app_kit, "Alice's piece")
+    setlist = await _setlist(app_kit, "Recital", own)
+    choir = await _group(app_kit)
+    await _add(app_kit, choir, bob)
+    assert (await _share(app_kit, setlist, group=choir, permission="contribute")).status_code == 201
+    await _login(app_kit, "bob")
+    bobs, _ = await _upload(app_kit, "Bob's piece")
+    assert (await app_kit.client.post(f"{BASE}/{setlist}/items", json={"arrangement_id": bobs})).status_code == 201
+    assert (await app_kit.client.delete(f"/api/v1/groups/{choir['id']}/members/{bob.id}")).status_code == 204
+
+    await _login(app_kit, "alice")
+    r = await app_kit.client.post(
+        f"{BASE}/{setlist}/shares?dry_run=true", json={"user_id": str(carol.id), "permission": "view"}
+    )
+    assert r.json() == {"held_back": [], "hidden_count": 1}
